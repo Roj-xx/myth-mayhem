@@ -11,12 +11,15 @@ namespace MythMayhem.Gameplay
 
         private readonly List<DeckCard> drawPile = new List<DeckCard>();
         private readonly List<DeckCard> hand = new List<DeckCard>();
+        private readonly List<DeckCard> discardPile = new List<DeckCard>();
         private bool initialized;
 
         public int HandCount => hand.Count;
         public int DrawPileSize => drawPile.Count;
+        public int DiscardPileSize => discardPile.Count;
         public bool IsEmpty => drawPile.Count == 0;
         public int MaxHandSize => maxHandSize;
+        public IReadOnlyList<DeckCard> CardPool => cardPool;
 
         private void Awake()
         {
@@ -27,6 +30,7 @@ namespace MythMayhem.Gameplay
         {
             drawPile.Clear();
             hand.Clear();
+            discardPile.Clear();
 
             if (cardPool != null)
             {
@@ -107,18 +111,45 @@ namespace MythMayhem.Gameplay
             if (index < 0 || index >= hand.Count)
                 return false;
 
+            DeckCard card = hand[index];
             hand.RemoveAt(index);
+
+            if (card != null)
+                discardPile.Add(card);
+
             return true;
+        }
+
+        public void Discard(DeckCard card)
+        {
+            if (card != null)
+                discardPile.Add(card);
         }
 
         private DeckCard DrawFromTop()
         {
+            if (drawPile.Count == 0)
+                ReshuffleDiscardIntoDraw();
+
             if (drawPile.Count == 0)
                 return null;
 
             DeckCard card = drawPile[drawPile.Count - 1];
             drawPile.RemoveAt(drawPile.Count - 1);
             return card;
+        }
+
+        // When the draw pile runs out, recycle the discard pile (played/destroyed
+        // cards) back into the draw pile and shuffle it.
+        private void ReshuffleDiscardIntoDraw()
+        {
+            if (discardPile.Count == 0)
+                return;
+
+            drawPile.AddRange(discardPile);
+            discardPile.Clear();
+            ShuffleDrawPile();
+            Debug.Log("Draw pile empty; reshuffled " + drawPile.Count + " card(s) from the discard pile.");
         }
     }
 }

@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.CreatureDefinition
   displayName: Manananggal
   prefab: {fileID: 0}
-  maxHealth: 80
-  attack: 30
+  maxHealth: 11
+  attack: 11
   cost: 2

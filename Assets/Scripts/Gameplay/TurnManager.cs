@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using MythMayhem.UI;
@@ -8,8 +9,10 @@ namespace MythMayhem.Gameplay
     {
         [SerializeField] private int startingSummonPoints = 5;
         [SerializeField] private int summonPointsPerTurn = 2;
+        [SerializeField] private int maxSummonPoints = 8;
         [SerializeField] private float endTurnDebounceSeconds = 0.5f;
         [SerializeField] private CombatController combat;
+        [SerializeField] private MatchController matchController;
         [SerializeField] private Text activeSideLabel;
         [SerializeField] private Text summonPointsLabel;
         [SerializeField] private Button endTurnButton;
@@ -26,35 +29,90 @@ namespace MythMayhem.Gameplay
         private bool opponentStartedFirstTurn;
 
         public CreatureSide ActiveSide => activeSide;
-
+        public event Action TurnBegan;
+        public DeckController OpponentDeck => opponentDeck;
+        public float EndTurnDebounceSeconds => endTurnDebounceSeconds;
+        public bool IsMatchOver => matchController != null && matchController.IsMatchOver;
         private void Start()
         {
             activeSide = CreatureSide.Player;
             openingTurn = true;
             playerStartedFirstTurn = true;
             opponentStartedFirstTurn = false;
+
             SetPoints(CreatureSide.Player, startingSummonPoints);
             SetPoints(CreatureSide.Opponent, startingSummonPoints);
 
             if (endTurnButton != null)
-                endTurnButton.onClick.AddListener(EndTurn);
+                endTurnButton.onClick.AddListener(RequestEndTurn);
 
             RefreshLabels();
 
             if (hand != null)
                 hand.RefreshInteractivity();
 
+            // Each peer only manages its own hand. In a networked match the
+            // authoritative turn/points arrive through BoardSnapshot, so the
+            // local peer must not touch the AI opponent's deck here.
             if (playerDeck != null)
                 playerDeck.DealInitialHand();
 
-            if (opponentDeck != null)
-                opponentDeck.DealInitialHand();
+            if (!NetworkSession.IsNetworked)
+            {
+                if (opponentDeck != null)
+                    opponentDeck.DealInitialHand();
+
+                TurnBegan?.Invoke();
+            }
         }
 
         private void OnDestroy()
         {
             if (endTurnButton != null)
-                endTurnButton.onClick.RemoveListener(EndTurn);
+                endTurnButton.onClick.RemoveListener(RequestEndTurn);
+        }
+
+        // Wired to the End Turn button. In a networked match the request is
+        // forwarded to the host; locally we only act when it is our turn.
+        public void RequestEndTurn()
+        {
+            if (NetworkSession.IsNetworked)
+            {
+                if (activeSide != NetworkSession.LocalSide)
+                    return;
+
+                if (NetworkSession.Intents != null)
+                    NetworkSession.Intents.RequestEndTurn();
+                return;
+            }
+
+            EndTurn();
+        }
+
+        // Applies the authoritative turn/points from a replicated snapshot.
+        public void NetworkApplyState(CreatureSide active, int playerPointsValue, int opponentPointsValue)
+        {
+            activeSide = active;
+            SetPoints(CreatureSide.Player, playerPointsValue);
+            SetPoints(CreatureSide.Opponent, opponentPointsValue);
+            RefreshLabels();
+
+            if (hand != null)
+                hand.RefreshInteractivity();
+        }
+
+        // Host-only: advances to the next side, awards points and lets listeners
+        // (modifier ticks) react. Combat is resolved by the caller beforehand.
+        public void NetworkAdvanceTurn(CreatureSide newActiveSide)
+        {
+            activeSide = newActiveSide;
+            AwardTurnStartPoints(newActiveSide);
+            RefreshLabels();
+
+            if (hand != null)
+                hand.RefreshInteractivity();
+
+            TurnBegan?.Invoke();
         }
 
         public bool IsActive(CreatureSide side)
@@ -84,6 +142,9 @@ namespace MythMayhem.Gameplay
 
         public void EndTurn()
         {
+            if (IsMatchOver)
+                return;
+
             if (Time.time < endTurnLockedUntil)
                 return;
 
@@ -92,6 +153,12 @@ namespace MythMayhem.Gameplay
             bool resolvesCombat = !openingTurn && activeSide == CreatureSide.Opponent;
             if (resolvesCombat && combat != null)
                 combat.ResolveCombatRound();
+
+            if (IsMatchOver)
+            {
+                RefreshLabels();
+                return;
+            }
 
             openingTurn = false;
 
@@ -103,6 +170,8 @@ namespace MythMayhem.Gameplay
                 hand.RefreshInteractivity();
 
             DrawCardForActiveSide();
+
+            TurnBegan?.Invoke();
         }
 
         private void DrawCardForActiveSide()
@@ -114,7 +183,7 @@ namespace MythMayhem.Gameplay
 
         private void SetPoints(CreatureSide side, int value)
         {
-            value = Mathf.Max(0, value);
+            value = Mathf.Clamp(value, 0, maxSummonPoints);
             if (side == CreatureSide.Player)
                 playerPoints = value;
             else
@@ -124,9 +193,9 @@ namespace MythMayhem.Gameplay
         private void GainPoints(CreatureSide side, int amount)
         {
             if (side == CreatureSide.Player)
-                playerPoints = Mathf.Max(0, playerPoints + amount);
+                playerPoints = Mathf.Clamp(playerPoints + amount, 0, maxSummonPoints);
             else
-                opponentPoints = Mathf.Max(0, opponentPoints + amount);
+                opponentPoints = Mathf.Clamp(opponentPoints + amount, 0, maxSummonPoints);
         }
 
         private bool HasStartedFirstTurn(CreatureSide side)
@@ -156,10 +225,18 @@ namespace MythMayhem.Gameplay
         private void RefreshLabels()
         {
             if (activeSideLabel != null)
-                activeSideLabel.text = activeSide == CreatureSide.Player ? "Player's Turn" : "Opponent's Turn";
+            {
+                if (NetworkSession.IsNetworked)
+                    activeSideLabel.text = activeSide == NetworkSession.LocalSide ? "Your Turn" : "Enemy Turn";
+                else
+                    activeSideLabel.text = activeSide == CreatureSide.Player ? "Player's Turn" : "Opponent's Turn";
+            }
 
             if (summonPointsLabel != null)
-                summonPointsLabel.text = "Summon Points: " + GetPoints(activeSide);
+            {
+                CreatureSide shown = NetworkSession.IsNetworked ? NetworkSession.LocalSide : activeSide;
+                summonPointsLabel.text = "Summon Points: " + GetPoints(shown);
+            }
         }
     }
 }

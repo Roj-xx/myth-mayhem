@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.CreatureDefinition
   displayName: Tikbalang
   prefab: {fileID: 0}
-  maxHealth: 150
-  attack: 20
+  maxHealth: 22
+  attack: 6
   cost: 2

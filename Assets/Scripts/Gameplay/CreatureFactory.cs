@@ -19,6 +19,8 @@ namespace MythMayhem.Gameplay
         [Header("Placeholder Fallback")]
         [SerializeField] private Material fallbackMaterial;
 
+        public Material FallbackMaterial => fallbackMaterial;
+
         [Header("Placement")]
         [SerializeField] private Vector3 spawnScale = new Vector3(0.8f, 0.9f, 0.8f);
         [SerializeField] private Vector3 spawnRotationEuler = Vector3.zero;

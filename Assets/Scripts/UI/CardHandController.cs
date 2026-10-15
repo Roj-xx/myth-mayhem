@@ -31,6 +31,8 @@ namespace MythMayhem.UI
         private readonly List<Image> handBackgrounds = new List<Image>();
         private readonly List<Text> handLabels = new List<Text>();
 
+        private int lastSignature = int.MinValue;
+
         public int SelectedIndex { get; private set; } = -1;
         public bool HasSelection => SelectedIndex >= 0 && IsSlotPlayable(SelectedIndex);
         public int HandCount => playerDeck != null ? playerDeck.HandCount : 0;
@@ -46,6 +48,37 @@ namespace MythMayhem.UI
 
                 DeckCard card = playerDeck.GetHandCard(SelectedIndex);
                 return card != null ? card.CreatureDefinition : null;
+            }
+        }
+
+        public DeckCard SelectedCard
+        {
+            get
+            {
+                if (playerDeck == null || SelectedIndex < 0 || SelectedIndex >= MaxSlotCount)
+                    return null;
+
+                return playerDeck.GetHandCard(SelectedIndex);
+            }
+        }
+
+        public CardType SelectedCardType => SelectedCard != null ? SelectedCard.Type : CardType.Creature;
+
+        public SupportCardDefinition SelectedSupportDefinition
+        {
+            get
+            {
+                DeckCard card = SelectedCard;
+                return card != null ? card.SupportDefinition : null;
+            }
+        }
+
+        public BuildingDefinition SelectedBuildingDefinition
+        {
+            get
+            {
+                DeckCard card = SelectedCard;
+                return card != null ? card.BuildingDefinition : null;
             }
         }
 
@@ -137,15 +170,20 @@ namespace MythMayhem.UI
 
         private void Update()
         {
+            if (ComputeSignature() == lastSignature)
+                return;
+
             RefreshInteractivity();
         }
 
         public void RefreshInteractivity()
         {
+            lastSignature = ComputeSignature();
+
             if (handButtons.Count == 0)
                 return;
 
-            bool playerTurn = turnManager == null || turnManager.IsActive(CreatureSide.Player);
+            bool playerTurn = turnManager == null || turnManager.IsActive(NetworkSession.LocalSide);
             int handCount = playerDeck != null ? playerDeck.HandCount : 0;
 
             for (int i = 0; i < handButtons.Count; i++)
@@ -160,16 +198,10 @@ namespace MythMayhem.UI
                     continue;
 
                 DeckCard card = playerDeck.GetHandCard(i);
-                bool playable = card != null && card.Type == CardType.Creature && card.CreatureDefinition != null;
+                bool playable = card != null && card.HasValidDefinition;
 
                 if (i < handLabels.Count && handLabels[i] != null)
-                {
-                    CreatureDefinition definition = card != null ? card.CreatureDefinition : null;
-                    string label = definition != null && !string.IsNullOrEmpty(definition.DisplayName)
-                        ? definition.DisplayName
-                        : "?";
-                    handLabels[i].text = label;
-                }
+                    handLabels[i].text = BuildCardLabel(card);
 
                 button.interactable = playerTurn && playable;
 
@@ -178,6 +210,29 @@ namespace MythMayhem.UI
             }
 
             RebuildLayout(handCount);
+        }
+
+        // Cheap change-detection so the hand UI is only rebuilt when something that
+        // affects it actually changes (hand contents, selection, active side, width).
+        private int ComputeSignature()
+        {
+            int handCount = playerDeck != null ? playerDeck.HandCount : 0;
+            int signature = handCount;
+            signature = (signature * 397) ^ SelectedIndex;
+            signature = (signature * 397) ^ ((turnManager == null || turnManager.IsActive(NetworkSession.LocalSide)) ? 1 : 0);
+
+            RectTransform panel = transform as RectTransform;
+            int width = panel != null ? Mathf.RoundToInt(panel.rect.width) : Screen.width;
+            signature = (signature * 397) ^ width;
+
+            for (int i = 0; i < handCount; i++)
+            {
+                DeckCard card = playerDeck.GetHandCard(i);
+                int id = card != null && card.DefinitionName != null ? card.DefinitionName.GetHashCode() : 0;
+                signature = (signature * 397) ^ id;
+            }
+
+            return signature;
         }
 
         private void RebuildLayout(int cardCount)
@@ -235,7 +290,43 @@ namespace MythMayhem.UI
                 return false;
 
             DeckCard card = playerDeck.GetHandCard(index);
-            return card != null && card.Type == CardType.Creature && card.CreatureDefinition != null;
+            return card != null && card.HasValidDefinition;
+        }
+
+        private static string BuildCardLabel(DeckCard card)
+        {
+            if (card == null)
+                return "?";
+
+            switch (card.Type)
+            {
+                case CardType.Support:
+                {
+                    SupportCardDefinition support = card.SupportDefinition;
+                    if (support == null)
+                        return "?";
+                    return support.DisplayName + "\n" + Flatten(support.Description) + "\nCost " + support.Cost;
+                }
+                case CardType.Building:
+                {
+                    BuildingDefinition building = card.BuildingDefinition;
+                    if (building == null)
+                        return "?";
+                    return building.DisplayName + "\n" + Flatten(building.Description) + "\nCost " + building.Cost;
+                }
+                default:
+                {
+                    CreatureDefinition creature = card.CreatureDefinition;
+                    if (creature == null)
+                        return "?";
+                    return creature.DisplayName + "\nATK " + creature.Attack + "  HP " + creature.MaxHealth + "\nCost " + creature.Cost;
+                }
+            }
+        }
+
+        private static string Flatten(string text)
+        {
+            return string.IsNullOrEmpty(text) ? "" : text.Replace('\n', ' ');
         }
 
         private void Select(int index)
@@ -248,9 +339,12 @@ namespace MythMayhem.UI
 
             if (instructionLabel != null)
             {
-                CreatureDefinition definition = SelectedDefinition;
-                string creatureName = definition != null ? definition.DisplayName : "Unknown";
-                instructionLabel.text = creatureName + " selected - tap one of your lanes";
+                DeckCard card = SelectedCard;
+                string cardName = card != null ? card.DefinitionName : "Unknown";
+                string tip = card != null && card.Type != CardType.Creature
+                    ? "tap a valid target"
+                    : "tap one of your lanes";
+                instructionLabel.text = cardName + " selected - " + tip;
             }
 
             SelectionChanged?.Invoke(index);

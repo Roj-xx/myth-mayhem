@@ -9,7 +9,8 @@ namespace MythMayhem.Gameplay
 
         private static Font cachedFont;
 
-        private CreatureInstance target;
+        private MonoBehaviour targetBehaviour;
+        private IHealthTarget target;
         private RectTransform fillRect;
         private Text valueLabel;
         private bool built;
@@ -18,29 +19,31 @@ namespace MythMayhem.Gameplay
         private int lastCurrent = int.MinValue;
         private int lastMax = int.MinValue;
 
-        public static CreatureHealthBar Create(CreatureInstance instance, float scale, Vector2 canvasSize, float heightOffset)
+        public static CreatureHealthBar Create(IHealthTarget instance, float scale, Vector2 canvasSize, float heightOffset)
         {
-            if (instance == null)
+            MonoBehaviour behaviour = instance as MonoBehaviour;
+            if (instance == null || behaviour == null)
                 return null;
 
             if (instance.HealthBar != null)
                 return instance.HealthBar;
 
-            CreatureHealthBar existing = instance.GetComponentInChildren<CreatureHealthBar>(true);
+            CreatureHealthBar existing = behaviour.GetComponentInChildren<CreatureHealthBar>(true);
             if (existing == null)
             {
-                GameObject root = new GameObject("HealthBar_" + instance.name);
+                GameObject root = new GameObject("HealthBar_" + behaviour.name);
                 existing = root.AddComponent<CreatureHealthBar>();
             }
 
-            existing.Configure(instance, scale, canvasSize, heightOffset);
-            instance.SetHealthBar(existing);
+            existing.Configure(instance, behaviour, scale, canvasSize, heightOffset);
+            instance.HealthBar = existing;
             return existing;
         }
 
-        private void Configure(CreatureInstance instance, float scale, Vector2 canvasSize, float heightOffset)
+        private void Configure(IHealthTarget instance, MonoBehaviour behaviour, float scale, Vector2 canvasSize, float heightOffset)
         {
             target = instance;
+            targetBehaviour = behaviour;
             scaleMultiplier = scale > 0f ? scale : 1f;
             heightMultiplier = heightOffset;
 
@@ -81,7 +84,7 @@ namespace MythMayhem.Gameplay
 
         private void LateUpdate()
         {
-            if (target == null)
+            if (targetBehaviour == null)
             {
                 Destroy(gameObject);
                 return;
@@ -93,10 +96,10 @@ namespace MythMayhem.Gameplay
 
         private void SnapToTarget()
         {
-            if (target == null)
+            if (targetBehaviour == null)
                 return;
 
-            transform.position = target.transform.position + Vector3.up * heightMultiplier;
+            transform.position = targetBehaviour.transform.position + Vector3.up * heightMultiplier;
 
             Camera camera = Camera.main;
             if (camera != null)
@@ -105,7 +108,7 @@ namespace MythMayhem.Gameplay
 
         private void Refresh(bool force)
         {
-            if (target == null || fillRect == null || valueLabel == null)
+            if (targetBehaviour == null || target == null || fillRect == null || valueLabel == null)
                 return;
 
             int max = target.MaxHealth;

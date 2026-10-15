@@ -14,6 +14,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.CreatureDefinition
   displayName: Aswang
   prefab: {fileID: 0}
-  maxHealth: 100
-  attack: 10
+  maxHealth: 8
+  attack: 5
   cost: 1
