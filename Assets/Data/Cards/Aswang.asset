@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab3d488ac79e49019234b6538f1eaab5, type: 3}
+  m_Name: Aswang
+  m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.CreatureDefinition
+  displayName: Aswang
+  prefab: {fileID: 8067938773318752261, guid: 3be2e7ce9be8f6948af216f4bfca4d1a, type: 3}
+  artwork: {fileID: 21300000, guid: 9fd6cbb071fd89bdb6d783443286d994, type: 3}
+  maxHealth: 8
+  attack: 5
+  cost: 1

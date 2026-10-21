@@ -1,4 +1,6 @@
 using UnityEngine;
+using MythMayhem.Audio;
+using MythMayhem.Board;
 using MythMayhem.Gameplay;
 
 namespace MythMayhem.Net
@@ -9,6 +11,9 @@ namespace MythMayhem.Net
     {
         [SerializeField] private CardPlayController cardPlay;
         [SerializeField] private int laneCount = 3;
+
+        private bool[] knownCreaturePresence = new bool[BoardSnapshot.SideCount * BoardManager.LaneCount];
+        private bool[] knownBuildingPresence = new bool[BoardSnapshot.SideCount * BoardManager.LaneCount];
 
         public void Apply(BoardSnapshot snapshot, CardDefinitionLookup lookup)
         {
@@ -27,23 +32,26 @@ namespace MythMayhem.Net
                     int index = BoardSnapshot.Index(side, lane, laneCount);
 
                     if (hasCreatures && index < snapshot.Creatures.Length)
-                        ApplyCreature(snapshot.Creatures[index], lookup, side, lane);
+                        ApplyCreature(snapshot.Creatures[index], lookup, side, lane, index);
 
                     if (hasBuildings && index < snapshot.Buildings.Length)
-                        ApplyBuilding(snapshot.Buildings[index], lookup, side, lane);
+                        ApplyBuilding(snapshot.Buildings[index], lookup, side, lane, index);
                 }
             }
         }
 
-        private void ApplyCreature(CreatureNetState state, CardDefinitionLookup lookup, CreatureSide side, int lane)
+        private void ApplyCreature(CreatureNetState state, CardDefinitionLookup lookup, CreatureSide side, int lane, int index)
         {
             CreatureInstance existing = cardPlay.GetCreature(side, lane);
             bool present = state.Present && state.Health > 0;
 
             if (!present)
             {
+                if (NetworkSession.IsClient && knownCreaturePresence[index])
+                    AudioManager.PlayDeathSound();
                 if (existing != null)
                     cardPlay.RemoveCreature(side, lane);
+                knownCreaturePresence[index] = false;
                 return;
             }
 
@@ -51,23 +59,28 @@ namespace MythMayhem.Net
             {
                 CreatureDefinition definition = lookup.Creature(state.CardName);
                 if (definition != null)
-                    cardPlay.SpawnNetworkCreature(definition, side, lane, state.Health, state.AttackMod, state.ModTurns);
+                    existing = cardPlay.SpawnNetworkCreature(definition, side, lane, state.Health, state.AttackMod, state.ModTurns);
             }
             else
             {
                 existing.SyncState(state.Health, state.AttackMod, state.ModTurns);
             }
+
+            knownCreaturePresence[index] = existing != null;
         }
 
-        private void ApplyBuilding(BuildingNetState state, CardDefinitionLookup lookup, CreatureSide side, int lane)
+        private void ApplyBuilding(BuildingNetState state, CardDefinitionLookup lookup, CreatureSide side, int lane, int index)
         {
             BuildingInstance existing = cardPlay.GetBuilding(side, lane);
             bool present = state.Present && state.Health > 0;
 
             if (!present)
             {
+                if (NetworkSession.IsClient && knownBuildingPresence[index])
+                    AudioManager.PlayDeathSound();
                 if (existing != null)
                     cardPlay.RemoveBuilding(side, lane);
+                knownBuildingPresence[index] = false;
                 return;
             }
 
@@ -75,12 +88,14 @@ namespace MythMayhem.Net
             {
                 BuildingDefinition definition = lookup.Building(state.CardName);
                 if (definition != null)
-                    cardPlay.SpawnNetworkBuilding(definition, side, lane, state.Health);
+                    existing = cardPlay.SpawnNetworkBuilding(definition, side, lane, state.Health);
             }
             else
             {
                 existing.RestoreHealth(state.Health);
             }
+
+            knownBuildingPresence[index] = existing != null;
         }
     }
 }

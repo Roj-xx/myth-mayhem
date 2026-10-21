@@ -16,6 +16,7 @@ namespace MythMayhem.Gameplay
         bool PlayBuilding(string cardName, int lane);
         bool PlaySupport(string cardName, int lane);
         void RequestEndTurn();
+        void RestartMatch();
     }
 
     // Lightweight global describing the current session. Kept free of any

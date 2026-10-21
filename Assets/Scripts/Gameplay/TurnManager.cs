@@ -1,6 +1,8 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
+using MythMayhem.Audio;
 using MythMayhem.UI;
 
 namespace MythMayhem.Gameplay
@@ -25,6 +27,7 @@ namespace MythMayhem.Gameplay
         private int opponentPoints;
         private bool openingTurn;
         private float endTurnLockedUntil;
+        private bool turnTransitioning;
         private bool playerStartedFirstTurn;
         private bool opponentStartedFirstTurn;
 
@@ -44,7 +47,10 @@ namespace MythMayhem.Gameplay
             SetPoints(CreatureSide.Opponent, startingSummonPoints);
 
             if (endTurnButton != null)
+            {
+                AudioManager.HookButton(endTurnButton);
                 endTurnButton.onClick.AddListener(RequestEndTurn);
+            }
 
             RefreshLabels();
 
@@ -142,6 +148,9 @@ namespace MythMayhem.Gameplay
 
         public void EndTurn()
         {
+            if (turnTransitioning)
+                return;
+
             if (IsMatchOver)
                 return;
 
@@ -149,29 +158,43 @@ namespace MythMayhem.Gameplay
                 return;
 
             endTurnLockedUntil = Time.time + endTurnDebounceSeconds;
+            StartCoroutine(EndTurnRoutine());
+        }
 
-            bool resolvesCombat = !openingTurn && activeSide == CreatureSide.Opponent;
-            if (resolvesCombat && combat != null)
-                combat.ResolveCombatRound();
-
-            if (IsMatchOver)
+        // Resolves combat (one lane at a time) before handing the turn over, so the
+        // next player can't act while the lanes are still fighting.
+        private IEnumerator EndTurnRoutine()
+        {
+            turnTransitioning = true;
+            try
             {
+                bool resolvesCombat = !openingTurn && activeSide == CreatureSide.Opponent;
+                if (resolvesCombat && combat != null)
+                    yield return combat.ResolveCombatRoundRoutine();
+
+                if (IsMatchOver)
+                {
+                    RefreshLabels();
+                    yield break;
+                }
+
+                openingTurn = false;
+
+                activeSide = activeSide == CreatureSide.Player ? CreatureSide.Opponent : CreatureSide.Player;
+                AwardTurnStartPoints(activeSide);
                 RefreshLabels();
-                return;
+
+                if (hand != null)
+                    hand.RefreshInteractivity();
+
+                DrawCardForActiveSide();
+
+                TurnBegan?.Invoke();
             }
-
-            openingTurn = false;
-
-            activeSide = activeSide == CreatureSide.Player ? CreatureSide.Opponent : CreatureSide.Player;
-            AwardTurnStartPoints(activeSide);
-            RefreshLabels();
-
-            if (hand != null)
-                hand.RefreshInteractivity();
-
-            DrawCardForActiveSide();
-
-            TurnBegan?.Invoke();
+            finally
+            {
+                turnTransitioning = false;
+            }
         }
 
         private void DrawCardForActiveSide()

@@ -4,6 +4,7 @@
     "references": [
         "UnityEngine.UI",
         "Unity.InputSystem",
+        "Unity.Cinemachine",
         "Unity.Netcode.Runtime",
         "Unity.Services.Core",
         "Unity.Services.Authentication",

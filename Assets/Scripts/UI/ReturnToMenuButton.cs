@@ -1,6 +1,6 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using MythMayhem.Gameplay;
 
 namespace MythMayhem.UI
 {
@@ -20,7 +20,10 @@ namespace MythMayhem.UI
 
         public void ReturnToMenu()
         {
-            SceneManager.LoadScene(menuSceneName);
+            if (NetworkSession.IsNetworked)
+                LobbyConnectorLocator.Current?.Shutdown();
+
+            SceneTransitionManager.LoadScene(menuSceneName);
         }
     }
 }

@@ -1,20 +1,27 @@
 using System;
 using UnityEngine;
 using UnityEngine.UI;
+using MythMayhem.Audio;
 using MythMayhem.Gameplay;
 
 namespace MythMayhem.UI
 {
-    // Drives the online lobby. Builds its own UI at runtime so no scene wiring or
-    // editor generator is required. The Relay join code is the only shareable token.
+    // Drives the online lobby controls assigned in the scene.
     public class LobbyMenuController : MonoBehaviour
     {
-        private GameObject panelRoot;
-        private Text statusLabel;
-        private Text codeLabel;
-        private InputField codeInput;
-        private Button createButton;
-        private Button joinButton;
+        [SerializeField] private bool showOnStart;
+        [SerializeField] private Font uiFont;
+        [SerializeField] private Sprite modalSprite;
+        [SerializeField] private Sprite primaryButtonSprite;
+        [SerializeField] private Sprite secondaryButtonSprite;
+        [SerializeField] private GameObject panelRoot;
+        [SerializeField] private Text statusLabel;
+        [SerializeField] private Text codeLabel;
+        [SerializeField] private InputField codeInput;
+        [SerializeField] private Button createButton;
+        [SerializeField] private Button joinButton;
+        [SerializeField] private Button copyButton;
+        [SerializeField] private Button backButton;
 
         public static LobbyMenuController Instance { get; private set; }
 
@@ -32,8 +39,18 @@ namespace MythMayhem.UI
         private void Awake()
         {
             Instance = this;
-            BuildUi();
-            SetPanelVisible(false);
+            if (panelRoot == null)
+                BuildRuntimeFallback();
+            WireButtons();
+            SetPanelVisible(showOnStart);
+
+            if (showOnStart)
+            {
+                SetBusy(false);
+                SetStatus(LobbyConnectorLocator.Available
+                    ? "Create a lobby, or enter a friend's code to join."
+                    : "Online play is not available in this build.");
+            }
         }
 
         private void OnDestroy()
@@ -45,6 +62,7 @@ namespace MythMayhem.UI
         public void Open()
         {
             SetPanelVisible(true);
+            AudioManager.SetPvpLobbyOpen(true);
 
             if (codeLabel != null)
                 codeLabel.text = string.Empty;
@@ -59,6 +77,14 @@ namespace MythMayhem.UI
         {
             LobbyConnectorLocator.Current?.Shutdown();
             SetPanelVisible(false);
+            AudioManager.SetPvpLobbyOpen(false);
+        }
+
+        public void BackToMenu()
+        {
+            LobbyConnectorLocator.Current?.Shutdown();
+            AudioManager.SetPvpLobbyOpen(false);
+            SceneTransitionManager.LoadScene("MainMenu");
         }
 
         public async void CreateLobby()
@@ -66,9 +92,10 @@ namespace MythMayhem.UI
             SetBusy(true);
             SetStatus("Creating lobby...");
 
+            ILobbyConnector connector = null;
             try
             {
-                ILobbyConnector connector = LobbyConnectorLocator.Ensure();
+                connector = LobbyConnectorLocator.Ensure();
                 if (connector == null)
                     throw new InvalidOperationException("Networking is unavailable.");
 
@@ -81,6 +108,7 @@ namespace MythMayhem.UI
             }
             catch (Exception e)
             {
+                connector?.Shutdown();
                 Debug.LogError("[Lobby] Create failed: " + e);
                 SetStatus("Could not create lobby: " + e.Message);
                 SetBusy(false);
@@ -92,9 +120,10 @@ namespace MythMayhem.UI
             SetBusy(true);
             SetStatus("Joining...");
 
+            ILobbyConnector connector = null;
             try
             {
-                ILobbyConnector connector = LobbyConnectorLocator.Ensure();
+                connector = LobbyConnectorLocator.Ensure();
                 if (connector == null)
                     throw new InvalidOperationException("Networking is unavailable.");
 
@@ -104,6 +133,7 @@ namespace MythMayhem.UI
             }
             catch (Exception e)
             {
+                connector?.Shutdown();
                 Debug.LogError("[Lobby] Join failed: " + e);
                 SetStatus("Could not join: " + e.Message);
                 SetBusy(false);
@@ -141,177 +171,151 @@ namespace MythMayhem.UI
                 panelRoot.SetActive(visible);
         }
 
-        // ------------------------------------------------------- runtime UI build
-
-        private void BuildUi()
+        private void WireButtons()
         {
-            Font font = LoadFont();
+            if (createButton != null)
+                createButton.onClick.RemoveListener(CreateLobby);
+            if (createButton != null)
+                createButton.onClick.AddListener(CreateLobby);
+            if (joinButton != null)
+                joinButton.onClick.RemoveListener(JoinLobby);
+            if (joinButton != null)
+                joinButton.onClick.AddListener(JoinLobby);
+            if (copyButton != null)
+                copyButton.onClick.RemoveListener(CopyCode);
+            if (copyButton != null)
+                copyButton.onClick.AddListener(CopyCode);
+            if (backButton != null)
+                backButton.onClick.RemoveListener(BackToMenu);
+            if (backButton != null)
+                backButton.onClick.AddListener(BackToMenu);
 
-            GameObject canvasObject = new GameObject("LobbyCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvasObject.transform.SetParent(transform, false);
-
-            Canvas canvas = canvasObject.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 100;
-
-            CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080f, 1920f);
-
-            panelRoot = CreateImage(canvasObject.transform, "Scrim", new Color(0f, 0f, 0f, 0.72f));
-
-            GameObject card = CreateImage(panelRoot.transform, "Card", new Color(0.03f, 0.04f, 0.07f, 0.98f));
-            RectTransform cardRect = card.GetComponent<RectTransform>();
-            cardRect.anchorMin = new Vector2(0.5f, 0.5f);
-            cardRect.anchorMax = new Vector2(0.5f, 0.5f);
-            cardRect.pivot = new Vector2(0.5f, 0.5f);
-            cardRect.sizeDelta = new Vector2(760f, 760f);
-            cardRect.anchoredPosition = Vector2.zero;
-
-            CreateLabel(card.transform, "Title", "ONLINE PVP", font, 56, new Vector2(0f, 300f), new Vector2(680f, 80f), new Color(0.96f, 0.82f, 0.42f));
-            statusLabel = CreateLabel(card.transform, "Status", string.Empty, font, 28, new Vector2(0f, 220f), new Vector2(680f, 90f), new Color(0.62f, 0.67f, 0.78f));
-            codeLabel = CreateLabel(card.transform, "Code", string.Empty, font, 40, new Vector2(0f, 140f), new Vector2(680f, 70f), new Color(0.93f, 0.94f, 0.97f));
-
-            codeInput = CreateInput(card.transform, "CodeInput", font, new Vector2(0f, 60f), new Vector2(660f, 76f));
-
-            CreateButton(card.transform, "CreateButton", "CREATE LOBBY", font, new Vector2(0f, -30f), CreateLobby);
-            joinButton = CreateButton(card.transform, "JoinButton", "JOIN", font, new Vector2(0f, -120f), JoinLobby);
-            createButton = FindButton(card.transform, "CreateButton");
-
-            CreateButton(card.transform, "CopyButton", "COPY CODE", font, new Vector2(-190f, -215f), CopyCode);
-            CreateButton(card.transform, "CloseButton", "CLOSE", font, new Vector2(190f, -215f), Close);
+            AudioManager.HookAllButtons();
         }
 
-        private GameObject CreateImage(Transform parent, string name, Color color)
+        private void BuildRuntimeFallback()
         {
-            GameObject go = new GameObject(name, typeof(Image));
-            go.transform.SetParent(parent, false);
+            Font font = uiFont != null ? uiFont : Resources.GetBuiltinResource<Font>("Arial.ttf");
+            GameObject root = CreateRuntimeImage(transform, "LobbyUI", new Color(0f, 0f, 0f, 0f));
+            panelRoot = root;
 
-            RectTransform rect = go.GetComponent<RectTransform>();
+            GameObject card = CreateRuntimeImage(root.transform, "LobbyModal", Color.white, modalSprite);
+            SetCenteredRect(card.GetComponent<RectTransform>(), new Vector2(1000f, 740f), Vector2.zero);
+
+            CreateRuntimeLabel(card.transform, "Title", "PVP LOBBY", font, 56,
+                new Vector2(0f, 280f), new Vector2(820f, 76f), new Color(0.96f, 0.82f, 0.42f));
+            statusLabel = CreateRuntimeLabel(card.transform, "Status", string.Empty, font, 26,
+                new Vector2(0f, 190f), new Vector2(820f, 100f), new Color(0.62f, 0.67f, 0.78f));
+            codeLabel = CreateRuntimeLabel(card.transform, "Code", string.Empty, font, 38,
+                new Vector2(0f, 90f), new Vector2(820f, 60f), new Color(0.93f, 0.94f, 0.97f));
+
+            codeInput = CreateRuntimeInput(card.transform, font);
+            createButton = CreateRuntimeButton(card.transform, "CreateButton", "CREATE LOBBY", font,
+                new Vector2(0f, -100f), new Vector2(620f, 106f), primaryButtonSprite);
+            joinButton = CreateRuntimeButton(card.transform, "JoinButton", "JOIN WITH CODE", font,
+                new Vector2(0f, -210f), new Vector2(620f, 106f), secondaryButtonSprite);
+            copyButton = CreateRuntimeButton(card.transform, "CopyButton", "COPY CODE", font,
+                new Vector2(-180f, -310f), new Vector2(300f, 72f));
+            backButton = CreateRuntimeButton(card.transform, "BackButton", "BACK TO MENU", font,
+                new Vector2(180f, -310f), new Vector2(300f, 72f));
+        }
+
+        private static GameObject CreateRuntimeImage(Transform parent, string name, Color color, Sprite sprite = null)
+        {
+            GameObject gameObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            gameObject.transform.SetParent(parent, false);
+
+            RectTransform rect = gameObject.GetComponent<RectTransform>();
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.offsetMin = Vector2.zero;
             rect.offsetMax = Vector2.zero;
 
-            go.GetComponent<Image>().color = color;
-            return go;
+            Image image = gameObject.GetComponent<Image>();
+            image.color = color;
+            image.sprite = sprite;
+            image.preserveAspect = false;
+            image.raycastTarget = sprite != null;
+            return gameObject;
         }
 
-        private Text CreateLabel(Transform parent, string name, string text, Font font, int size, Vector2 position, Vector2 dimensions, Color color)
+        private static Text CreateRuntimeLabel(Transform parent, string name, string value, Font font, int size,
+            Vector2 position, Vector2 dimensions, Color color)
         {
-            GameObject go = new GameObject(name, typeof(Text));
-            go.transform.SetParent(parent, false);
+            GameObject gameObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+            gameObject.transform.SetParent(parent, false);
+            SetCenteredRect(gameObject.GetComponent<RectTransform>(), dimensions, position);
 
-            RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = dimensions;
-            rect.anchoredPosition = position;
-
-            Text label = go.GetComponent<Text>();
-            label.text = text;
-            label.font = font;
-            label.fontSize = size;
-            label.color = color;
-            label.alignment = TextAnchor.MiddleCenter;
-            label.horizontalOverflow = HorizontalWrapMode.Wrap;
-            label.verticalOverflow = VerticalWrapMode.Overflow;
-            return label;
+            Text text = gameObject.GetComponent<Text>();
+            text.text = value;
+            text.font = font;
+            text.fontSize = size;
+            text.fontStyle = FontStyle.Bold;
+            text.color = color;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Overflow;
+            return text;
         }
 
-        private Button CreateButton(Transform parent, string name, string label, Font font, Vector2 position, Action onClick)
+        private Button CreateRuntimeButton(Transform parent, string name, string label, Font font,
+            Vector2 position, Vector2 dimensions, Sprite sprite = null)
         {
-            GameObject go = new GameObject(name, typeof(Image), typeof(Button));
-            go.transform.SetParent(parent, false);
+            GameObject gameObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            gameObject.transform.SetParent(parent, false);
+            SetCenteredRect(gameObject.GetComponent<RectTransform>(), dimensions, position);
 
-            RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = new Vector2(380f, 84f);
-            rect.anchoredPosition = position;
+            Image image = gameObject.GetComponent<Image>();
+            image.color = sprite != null ? Color.white : new Color(0.106f, 0.137f, 0.2f, 1f);
+            image.sprite = sprite;
+            image.preserveAspect = sprite != null;
 
-            Image background = go.GetComponent<Image>();
-            background.color = new Color(0.106f, 0.137f, 0.2f, 1f);
+            Button button = gameObject.GetComponent<Button>();
+            button.targetGraphic = image;
 
-            Button button = go.GetComponent<Button>();
-            button.targetGraphic = background;
-            ColorBlock colors = button.colors;
-            colors.highlightedColor = new Color(0.16f, 0.22f, 0.34f, 1f);
-            colors.pressedColor = new Color(0.09f, 0.12f, 0.18f, 1f);
-            button.colors = colors;
-            button.onClick.AddListener(() => onClick());
-
-            CreateLabel(go.transform, "Label", label, font, 30, Vector2.zero, new Vector2(360f, 84f), new Color(0.93f, 0.94f, 0.97f));
+            Text buttonLabel = CreateRuntimeLabel(gameObject.transform, "Label", label, font, 30,
+                Vector2.zero, new Vector2(dimensions.x - 24f, dimensions.y - 12f), new Color(0.93f, 0.94f, 0.97f));
+            RectTransform labelRect = buttonLabel.rectTransform;
+            labelRect.anchorMin = Vector2.zero;
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = new Vector2(12f, 6f);
+            labelRect.offsetMax = new Vector2(-12f, -6f);
             return button;
         }
 
-        private InputField CreateInput(Transform parent, string name, Font font, Vector2 position, Vector2 dimensions)
+        private InputField CreateRuntimeInput(Transform parent, Font font)
         {
-            GameObject go = new GameObject(name, typeof(Image), typeof(InputField));
-            go.transform.SetParent(parent, false);
+            const float width = 760f;
+            const float height = 76f;
+            GameObject gameObject = new GameObject("CodeInput", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(InputField));
+            gameObject.transform.SetParent(parent, false);
+            SetCenteredRect(gameObject.GetComponent<RectTransform>(), new Vector2(width, height), Vector2.zero);
 
-            RectTransform rect = go.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0.5f, 0.5f);
-            rect.anchorMax = new Vector2(0.5f, 0.5f);
-            rect.sizeDelta = dimensions;
-            rect.anchoredPosition = position;
-
-            go.GetComponent<Image>().color = new Color(1f, 1f, 1f, 0.95f);
-
-            InputField input = go.GetComponent<InputField>();
-            input.targetGraphic = go.GetComponent<Image>();
+            Image image = gameObject.GetComponent<Image>();
+            image.color = new Color(1f, 1f, 1f, 0.95f);
+            InputField input = gameObject.GetComponent<InputField>();
+            input.targetGraphic = image;
             input.characterLimit = 12;
 
-            Text text = CreateLabel(go.transform, "Text", string.Empty, font, 30, Vector2.zero, new Vector2(dimensions.x - 30f, dimensions.y - 16f), new Color(0.05f, 0.06f, 0.1f));
+            Text text = CreateRuntimeLabel(gameObject.transform, "Text", string.Empty, font, 30,
+                Vector2.zero, new Vector2(width - 30f, height - 16f), new Color(0.05f, 0.06f, 0.1f));
+            Text placeholder = CreateRuntimeLabel(gameObject.transform, "Placeholder", "ENTER CODE", font, 30,
+                Vector2.zero, new Vector2(width - 30f, height - 16f), new Color(0.3f, 0.33f, 0.4f));
             text.alignment = TextAnchor.MiddleLeft;
             text.supportRichText = false;
-
-            Text placeholder = CreateLabel(go.transform, "Placeholder", "ENTER CODE", font, 30, Vector2.zero, new Vector2(dimensions.x - 30f, dimensions.y - 16f), new Color(0.3f, 0.33f, 0.4f));
             placeholder.alignment = TextAnchor.MiddleLeft;
-
             input.textComponent = text;
             input.placeholder = placeholder;
             return input;
         }
 
-        private static Button FindButton(Transform parent, string name)
+        private static void SetCenteredRect(RectTransform rect, Vector2 size, Vector2 position)
         {
-            for (int i = 0; i < parent.childCount; i++)
-            {
-                Transform child = parent.GetChild(i);
-                if (child.name == name)
-                    return child.GetComponent<Button>();
-            }
-
-            return null;
-        }
-
-        private static Font LoadFont()
-        {
-            Font font = null;
-
-            try
-            {
-                font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            }
-            catch
-            {
-                // Ignore; fall through to the next option.
-            }
-
-            if (font == null)
-            {
-                try
-                {
-                    font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-                }
-                catch
-                {
-                    // Ignore; text will fall back to the default font.
-                }
-            }
-
-            return font;
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = size;
+            rect.anchoredPosition = position;
         }
     }
 }

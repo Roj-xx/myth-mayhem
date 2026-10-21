@@ -12,6 +12,8 @@ namespace MythMayhem.Gameplay
     public class BuildingDefinition : ScriptableObject
     {
         [SerializeField] private string displayName = "Building";
+        [SerializeField] private GameObject prefab;
+        [SerializeField] private Sprite artwork;
         [SerializeField] private int cost = 2;
         [SerializeField] private int maxHealth = 60;
         [SerializeField] private BuildingEffectType effectType = BuildingEffectType.LaneDefense;
@@ -19,6 +21,8 @@ namespace MythMayhem.Gameplay
         [SerializeField] private string description = "";
 
         public string DisplayName => displayName;
+        public GameObject Prefab => prefab;
+        public Sprite Artwork => artwork;
         public int Cost => cost;
         public int MaxHealth => maxHealth;
         public BuildingEffectType EffectType => effectType;

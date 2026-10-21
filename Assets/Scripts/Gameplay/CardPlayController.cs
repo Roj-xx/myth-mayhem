@@ -1,5 +1,6 @@
 using UnityEngine;
 using MythMayhem.Board;
+using MythMayhem.Audio;
 
 namespace MythMayhem.Gameplay
 {
@@ -198,18 +199,24 @@ namespace MythMayhem.Gameplay
                     if (target.Side != side)
                         return false;
                     target.AddAttackModifier(support.Magnitude, support.DurationTurns);
+                    if (!NetworkSession.IsNetworked)
+                        AudioManager.PlaySpawnSound();
                     return true;
 
                 case SupportEffectType.FriendlyHeal:
                     if (target.Side != side)
                         return false;
                     target.Heal(support.Magnitude);
+                    if (!NetworkSession.IsNetworked)
+                        AudioManager.PlaySpawnSound();
                     return true;
 
                 case SupportEffectType.EnemyAttackDebuff:
                     if (target.Side == side)
                         return false;
                     target.AddAttackModifier(-support.Magnitude, support.DurationTurns);
+                    if (!NetworkSession.IsNetworked)
+                        AudioManager.PlaySpawnSound();
                     return true;
 
                 default:
@@ -247,6 +254,7 @@ namespace MythMayhem.Gameplay
                 CreatureHealthBar.Create(instance, buildingHealthBarScale, buildingHealthBarSize, buildingHealthBarHeightOffset);
 
             BuildingArray(side)[lane] = instance.gameObject;
+            AudioManager.PlaySpawnSound();
             return true;
         }
 

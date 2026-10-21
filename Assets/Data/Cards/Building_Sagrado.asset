@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ed0fbf8b14a32e5212e613b5af77ca4a, type: 3}
+  m_Name: Building_Sagrado
+  m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.BuildingDefinition
+  displayName: Sagrado
+  prefab: {fileID: 3482721686571705965, guid: ae5ea790d81a8584dbecf1db5a537618, type: 3}
+  artwork: {fileID: 21300000, guid: 9e630a3c7cb12874fb0bb385c9c0b26a, type: 3}
+  cost: 2
+  maxHealth: 30
+  effectType: 1
+  magnitude: 2
+  description: Friendly creatures gain +2 attack while it stands

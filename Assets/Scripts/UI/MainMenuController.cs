@@ -1,23 +1,22 @@
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace MythMayhem.UI
 {
     public class MainMenuController : MonoBehaviour
     {
-        [SerializeField] private string battleSceneName = "SampleScene";
+        [SerializeField] private string battleSceneName = "PlayWithAI";
+        [SerializeField] private string pvpLobbySceneName = "PvPLobby";
         [SerializeField] private GameObject messageOverlay;
         [SerializeField] private Text messageTitle;
         [SerializeField] private Text messageBody;
-        [SerializeField] private LobbyMenuController lobby;
 
         public void PlayVsAi()
         {
             if (string.IsNullOrEmpty(battleSceneName))
                 return;
 
-            SceneManager.LoadScene(battleSceneName);
+            SceneTransitionManager.LoadSceneWithLoadingScreen(battleSceneName);
         }
 
         public void ShowTutorial()
@@ -29,16 +28,13 @@ namespace MythMayhem.UI
 
         public void ShowPvp()
         {
-            LobbyMenuController target = lobby != null ? lobby : LobbyMenuController.GetOrCreate();
-            if (target != null)
+            if (string.IsNullOrWhiteSpace(pvpLobbySceneName))
             {
-                target.Open();
+                Debug.LogError("[MainMenu] PvP lobby scene name is not set.");
                 return;
             }
 
-            ShowMessage(
-                "ONLINE PVP",
-                "Online battles need a Relay lobby, but matchmaking is unavailable in this build.");
+            SceneTransitionManager.LoadScene(pvpLobbySceneName);
         }
 
         public void HideMessage()

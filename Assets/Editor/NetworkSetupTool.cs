@@ -14,9 +14,8 @@ namespace MythMayhem.EditorTools
     // their references. Safe to run more than once; existing components are reused.
     public static class NetworkSetupTool
     {
-        private const string BattleScenePath = "Assets/Scenes/SampleScene.unity";
+        private const string BattleScenePath = "Assets/Scenes/PlayWithAI.unity";
 
-        [MenuItem("Myth Mayhem/Setup Networked Battle Scene")]
         public static void SetupBattleScene()
         {
             Scene scene = MythMayhemUi.OpenForScopedEditing(BattleScenePath, BattleScenePath);

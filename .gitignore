@@ -107,3 +107,7 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Large AI-generated battle arena model (kept local only, exceeds git limits)
+/Assets/Art/Arena/
+/Assets/Art/Arena.meta

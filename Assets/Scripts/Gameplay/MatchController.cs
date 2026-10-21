@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using MythMayhem.Audio;
+using MythMayhem.UI;
 
 namespace MythMayhem.Gameplay
 {
@@ -39,8 +40,8 @@ namespace MythMayhem.Gameplay
 
         private void Start()
         {
-            if (buildRuntimeHud && hud == null)
-                hud = HeroHud.Create(this);
+            if (hud == null)
+                hud = HeroHud.Resolve(this, buildRuntimeHud);
 
             RefreshHud();
             HeroHealthChanged?.Invoke(playerHealth, opponentHealth);
@@ -117,17 +118,21 @@ namespace MythMayhem.Gameplay
                 return;
 
             outcome = result;
+            AudioManager.PlaySplashSound();
             hud?.ShowGameOver(result);
             MatchEnded?.Invoke(result);
         }
 
         public void Restart()
         {
-            Scene scene = SceneManager.GetActiveScene();
-            if (scene.buildIndex >= 0)
-                SceneManager.LoadScene(scene.buildIndex);
-            else
-                SceneManager.LoadScene(scene.name);
+            if (NetworkSession.IsNetworked && NetworkSession.Intents != null)
+            {
+                NetworkSession.Intents.RestartMatch();
+                return;
+            }
+
+            SceneTransitionManager.LoadSceneWithLoadingScreen(
+                UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
         }
 
         private void RaiseHealthChanged()

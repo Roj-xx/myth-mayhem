@@ -10,7 +10,7 @@ namespace MythMayhem.Gameplay
 {
     public class SummonController : MonoBehaviour
     {
-        private const string InstructionMessage = "Select a card, then tap one of your lanes";
+        private const string InstructionMessage = "Drag a card onto a lane to play it";
 
         [SerializeField] private BoardManager board;
         [SerializeField] private CardHandController hand;
@@ -41,32 +41,10 @@ namespace MythMayhem.Gameplay
             if (IsOverUI(screenPosition))
                 return;
 
-            // A debuff ("Sumpa") must be aimed at an enemy lane; every other card
-            // (creature, building, friendly support) targets one of the local
-            // player's lanes. We branch on the selected card so the two spawn rows
-            // can never be confused, which matters because they sit close together.
-            if (CanTargetEnemyLane())
+            if (hand != null && hand.HasSelection)
             {
-                int enemyLane = FindRemoteLane(screenPosition);
-                if (enemyLane >= 0)
-                {
-                    PlaySelectedCard(enemyLane, NetworkSession.RemoteSide);
-                    return;
-                }
-
-                SetStatus("Tap an enemy lane to target its creature");
-                return;
+                SetStatus("Drag the selected card onto a lane to play it");
             }
-
-            int lane = FindLocalLane(screenPosition);
-            if (lane >= 0)
-            {
-                PlaySelectedCard(lane, NetworkSession.LocalSide);
-                return;
-            }
-
-            if (IsNearRemoteSpawn(screenPosition))
-                SetStatus("You can only play into your own lanes");
         }
 
         private bool TryGetTap(out Vector2 screenPosition)
@@ -196,31 +174,82 @@ namespace MythMayhem.Gameplay
             return Vector2.Distance(screenPosition, new Vector2(projected.x, projected.y));
         }
 
-        private void PlaySelectedCard(int lane, CreatureSide side)
+        public bool TryPlaySelectedAt(Vector2 screenPosition)
         {
             if (turnManager != null && turnManager.IsMatchOver)
             {
                 SetStatus("The match is over");
-                return;
+                return false;
             }
 
             if (turnManager != null && !turnManager.IsActive(NetworkSession.LocalSide))
             {
                 SetStatus("Wait for your turn");
-                return;
+                return false;
             }
 
             if (hand == null || !hand.HasSelection)
             {
                 SetStatus("Select a card first");
-                return;
+                return false;
             }
 
             DeckCard card = hand.SelectedCard;
             if (card == null)
             {
                 SetStatus("Select a card first");
-                return;
+                return false;
+            }
+
+            if (CanTargetEnemyLane())
+            {
+                int enemyLane = FindRemoteLane(screenPosition);
+                if (enemyLane < 0)
+                {
+                    SetStatus("Drop on an enemy lane to target its creature");
+                    return false;
+                }
+                return PlaySelectedCard(enemyLane, NetworkSession.RemoteSide);
+            }
+
+            int lane = FindLocalLane(screenPosition);
+            if (lane < 0)
+            {
+                if (IsNearRemoteSpawn(screenPosition))
+                    SetStatus("You can only play into your own lanes");
+                else
+                    SetStatus("Drop the card on one of your lanes");
+                return false;
+            }
+
+            return PlaySelectedCard(lane, NetworkSession.LocalSide);
+        }
+
+        private bool PlaySelectedCard(int lane, CreatureSide side)
+        {
+            if (turnManager != null && turnManager.IsMatchOver)
+            {
+                SetStatus("The match is over");
+                return false;
+            }
+
+            if (turnManager != null && !turnManager.IsActive(NetworkSession.LocalSide))
+            {
+                SetStatus("Wait for your turn");
+                return false;
+            }
+
+            if (hand == null || !hand.HasSelection)
+            {
+                SetStatus("Select a card first");
+                return false;
+            }
+
+            DeckCard card = hand.SelectedCard;
+            if (card == null)
+            {
+                SetStatus("Select a card first");
+                return false;
             }
 
             // In a networked match the local peer sends an intent; the host
@@ -242,30 +271,27 @@ namespace MythMayhem.Gameplay
 
                 hand.ConsumeSelected();
                 SetStatus("Played " + card.DefinitionName + " in lane " + (lane + 1));
-                return;
+                return true;
             }
 
             switch (card.Type)
             {
                 case CardType.Support:
-                    TryPlaySupport(card, lane, side);
-                    break;
+                    return TryPlaySupport(card, lane, side);
                 case CardType.Building:
-                    TryPlaceBuilding(card, lane);
-                    break;
+                    return TryPlaceBuilding(card, lane);
                 default:
-                    TrySummon(lane);
-                    break;
+                    return TrySummon(lane);
             }
         }
 
-        private void TryPlaySupport(DeckCard card, int lane, CreatureSide side)
+        private bool TryPlaySupport(DeckCard card, int lane, CreatureSide side)
         {
             SupportCardDefinition support = card != null ? card.SupportDefinition : null;
             if (support == null || cardPlay == null)
             {
                 SetStatus("Cannot play that card right now");
-                return;
+                return false;
             }
 
             CreatureSide localSide = NetworkSession.LocalSide;
@@ -273,20 +299,20 @@ namespace MythMayhem.Gameplay
             if (turnManager != null && !turnManager.CanAfford(localSide, support.Cost))
             {
                 SetStatus("Not enough summon points");
-                return;
+                return false;
             }
 
             CreatureInstance target = GetSupportTarget(support, lane, side);
             if (target == null)
             {
                 SetStatus("No valid target for that card");
-                return;
+                return false;
             }
 
             if (!cardPlay.TryApplySupport(localSide, support, target))
             {
                 SetStatus("No valid target for that card");
-                return;
+                return false;
             }
 
             hand.ConsumeSelected();
@@ -295,6 +321,7 @@ namespace MythMayhem.Gameplay
                 turnManager.Spend(localSide, support.Cost);
 
             SetStatus(support.DisplayName + " played on " + target.DisplayName);
+            return true;
         }
 
         private CreatureInstance GetSupportTarget(SupportCardDefinition support, int lane, CreatureSide side)
@@ -309,13 +336,13 @@ namespace MythMayhem.Gameplay
             return cardPlay.GetCreature(targetSide, lane);
         }
 
-        private void TryPlaceBuilding(DeckCard card, int lane)
+        private bool TryPlaceBuilding(DeckCard card, int lane)
         {
             BuildingDefinition building = card != null ? card.BuildingDefinition : null;
             if (building == null || cardPlay == null)
             {
                 SetStatus("Cannot play that card right now");
-                return;
+                return false;
             }
 
             CreatureSide localSide = NetworkSession.LocalSide;
@@ -323,19 +350,19 @@ namespace MythMayhem.Gameplay
             if (!cardPlay.IsLaneOpenForBuilding(localSide, lane))
             {
                 SetStatus("Lane " + (lane + 1) + " already has a building");
-                return;
+                return false;
             }
 
             if (turnManager != null && !turnManager.CanAfford(localSide, building.Cost))
             {
                 SetStatus("Not enough summon points");
-                return;
+                return false;
             }
 
             if (!cardPlay.TryPlaceBuilding(localSide, building, lane))
             {
                 SetStatus("Cannot place that building here");
-                return;
+                return false;
             }
 
             hand.ConsumeSelected();
@@ -344,35 +371,36 @@ namespace MythMayhem.Gameplay
                 turnManager.Spend(localSide, building.Cost);
 
             SetStatus("Placed " + building.DisplayName + " in lane " + (lane + 1));
+            return true;
         }
 
-        private void TrySummon(int lane)
+        private bool TrySummon(int lane)
         {
             CreatureSide localSide = NetworkSession.LocalSide;
 
             if (turnManager != null && !turnManager.IsActive(localSide))
             {
                 SetStatus("Wait for your turn");
-                return;
+                return false;
             }
 
             if (hand == null || !hand.HasSelection)
             {
                 SetStatus("Select a card first");
-                return;
+                return false;
             }
 
             if (!cardPlay.IsLaneOpenForCreature(localSide, lane))
             {
                 SetStatus("Lane " + (lane + 1) + " already has a creature");
-                return;
+                return false;
             }
 
             CreatureDefinition definition = hand.SelectedDefinition;
             if (definition == null)
             {
                 SetStatus("Cannot summon right now");
-                return;
+                return false;
             }
 
             int cost = definition.Cost;
@@ -380,7 +408,7 @@ namespace MythMayhem.Gameplay
             if (turnManager != null && !turnManager.CanAfford(localSide, cost))
             {
                 SetStatus("Not enough summon points");
-                return;
+                return false;
             }
 
             string failure;
@@ -388,7 +416,7 @@ namespace MythMayhem.Gameplay
             if (summoned == null)
             {
                 SetStatus(string.IsNullOrEmpty(failure) ? "Cannot summon right now" : failure);
-                return;
+                return false;
             }
 
             hand.ConsumeSelected();
@@ -397,6 +425,7 @@ namespace MythMayhem.Gameplay
                 turnManager.Spend(localSide, cost);
 
             SetStatus("Summoned " + definition.DisplayName + " to lane " + (lane + 1));
+            return true;
         }
 
         public void SetLaneOccupant(int lane, GameObject occupant)

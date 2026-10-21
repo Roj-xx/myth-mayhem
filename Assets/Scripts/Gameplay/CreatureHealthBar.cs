@@ -6,11 +6,13 @@ namespace MythMayhem.Gameplay
     public class CreatureHealthBar : MonoBehaviour
     {
         private const float BaseWorldScale = 0.01f;
+        private const float ModelClearance = 0.25f;
 
         private static Font cachedFont;
 
         private MonoBehaviour targetBehaviour;
         private IHealthTarget target;
+        private Renderer[] targetRenderers;
         private RectTransform fillRect;
         private Text valueLabel;
         private bool built;
@@ -44,6 +46,7 @@ namespace MythMayhem.Gameplay
         {
             target = instance;
             targetBehaviour = behaviour;
+            targetRenderers = behaviour.GetComponentsInChildren<Renderer>();
             scaleMultiplier = scale > 0f ? scale : 1f;
             heightMultiplier = heightOffset;
 
@@ -99,7 +102,19 @@ namespace MythMayhem.Gameplay
             if (targetBehaviour == null)
                 return;
 
-            transform.position = targetBehaviour.transform.position + Vector3.up * heightMultiplier;
+            Vector3 position = targetBehaviour.transform.position;
+            float height = heightMultiplier;
+
+            if (targetRenderers != null)
+            {
+                foreach (Renderer renderer in targetRenderers)
+                {
+                    if (renderer != null)
+                        height = Mathf.Max(height, renderer.bounds.max.y - position.y + ModelClearance);
+                }
+            }
+
+            transform.position = position + Vector3.up * height;
 
             Camera camera = Camera.main;
             if (camera != null)

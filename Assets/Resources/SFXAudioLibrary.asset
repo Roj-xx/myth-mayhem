@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 75b32f90e2cb41a7a63dc9dd773c61b1, type: 3}
+  m_Name: SFXAudioLibrary
+  m_EditorClassIdentifier:
+  splashSound: {fileID: 8300000, guid: 6e858048b551e034386f395392890a3a, type: 3}
+  mainSound: {fileID: 8300000, guid: 6d3147347e2d4d94382a4acaeabf0174, type: 3}
+  clickSound: {fileID: 8300000, guid: 6a5d40bdbcb34153a2ec5809d4ff8669, type: 3}
+  playSound: {fileID: 8300000, guid: 4475df07f8c042c4297c15738d227128, type: 3}
+  spawnSound: {fileID: 8300000, guid: d56ae7436705bd740a196d8990219db5, type: 3}
+  deathSound: {fileID: 8300000, guid: 7bd576392e9efd042b8d55781ff95328, type: 3}

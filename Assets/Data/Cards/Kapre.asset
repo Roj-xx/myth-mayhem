@@ -1,0 +1,20 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ab3d488ac79e49019234b6538f1eaab5, type: 3}
+  m_Name: Kapre
+  m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.Gameplay.CreatureDefinition
+  displayName: Kapre
+  prefab: {fileID: 6742766095273556801, guid: dfa2f69c5246aba4db938fe76bfe4246, type: 3}
+  artwork: {fileID: 21300000, guid: d6019cbe82193594cb3b62c696cf5560, type: 3}
+  maxHealth: 34
+  attack: 14
+  cost: 4

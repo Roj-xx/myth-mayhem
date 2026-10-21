@@ -1,96 +1,98 @@
 using System.Collections;
 using UnityEngine;
-using UnityEngine.SceneManagement;
-using UnityEngine.UI;
+using UnityEngine.Video;
 
 namespace MythMayhem.UI
 {
+    [RequireComponent(typeof(VideoPlayer))]
     public class SplashController : MonoBehaviour
     {
-        [Header("Transition")]
+        [SerializeField] private string loadingSceneName = "LoadingScreen";
         [SerializeField] private string nextSceneName = "MainMenu";
-        [SerializeField] private CanvasGroup contentGroup;
-        [SerializeField] private Button skipButton;
+        [SerializeField] private float prepareTimeoutSeconds = 15f;
 
-        [Header("Timing (unscaled seconds)")]
-        [SerializeField] private float fadeInSeconds = 0.8f;
-        [SerializeField] private float displaySeconds = 3f;
-        [SerializeField] private float fadeOutSeconds = 0.55f;
-        [SerializeField] private float skipFadeOutSeconds = 0.3f;
-
-        private bool _skipped;
-        private bool _transitioning;
+        private VideoPlayer videoPlayer;
+        private bool transitioning;
+        private bool videoFailed;
 
         private void Awake()
         {
-            if (contentGroup != null)
-                contentGroup.alpha = 0f;
+            videoPlayer = GetComponent<VideoPlayer>();
+            videoPlayer.playOnAwake = false;
+            videoPlayer.isLooping = false;
+            videoPlayer.renderMode = VideoRenderMode.CameraFarPlane;
+            videoPlayer.targetCamera = Camera.main;
+            videoPlayer.aspectRatio = VideoAspectRatio.FitInside;
+            videoPlayer.loopPointReached += HandleVideoFinished;
+            videoPlayer.errorReceived += HandleVideoError;
+
+            if (videoPlayer.targetCamera == null)
+                Debug.LogError("[Splash] No Main Camera is available to display the splash video.");
+        }
+
+        private void OnDestroy()
+        {
+            if (videoPlayer == null)
+                return;
+
+            videoPlayer.loopPointReached -= HandleVideoFinished;
+            videoPlayer.errorReceived -= HandleVideoError;
         }
 
         private void Start()
         {
-            StartCoroutine(Run());
+            StartCoroutine(PlaySplash());
         }
 
-        public void Skip()
+        private IEnumerator PlaySplash()
         {
-            if (_transitioning)
-                return;
+            if (videoPlayer.clip == null && string.IsNullOrWhiteSpace(videoPlayer.url))
+            {
+                Debug.LogError("[Splash] SplashVid has no video clip or URL.");
+                TransitionToLoadingScreen();
+                yield break;
+            }
 
-            _skipped = true;
-        }
-
-        private IEnumerator Run()
-        {
-            yield return Fade(0f, 1f, fadeInSeconds);
-
-            float elapsed = fadeInSeconds;
-            while (!_skipped && elapsed < displaySeconds)
+            videoPlayer.Prepare();
+            float elapsed = 0f;
+            while (!videoPlayer.isPrepared && !videoFailed && elapsed < prepareTimeoutSeconds)
             {
                 elapsed += Time.unscaledDeltaTime;
                 yield return null;
             }
 
-            float outSeconds = _skipped ? skipFadeOutSeconds : fadeOutSeconds;
-            yield return Fade(contentGroup != null ? contentGroup.alpha : 1f, 0f, outSeconds);
-
-            Transition();
-        }
-
-        private IEnumerator Fade(float from, float to, float duration)
-        {
-            if (contentGroup == null)
-                yield break;
-
-            if (duration <= 0f)
+            if (videoFailed || !videoPlayer.isPrepared)
             {
-                contentGroup.alpha = to;
+                if (!videoFailed)
+                    Debug.LogError("[Splash] Timed out preparing the splash video.");
+
+                TransitionToLoadingScreen();
                 yield break;
             }
 
-            float t = 0f;
-            while (t < duration)
-            {
-                t += Time.unscaledDeltaTime;
-                contentGroup.alpha = Mathf.Lerp(from, to, Mathf.Clamp01(t / duration));
-                yield return null;
-            }
-
-            contentGroup.alpha = to;
+            videoPlayer.Play();
         }
 
-        private void Transition()
+        private void HandleVideoFinished(VideoPlayer source)
         {
-            if (_transitioning)
+            TransitionToLoadingScreen();
+        }
+
+        private void HandleVideoError(VideoPlayer source, string message)
+        {
+            videoFailed = true;
+            Debug.LogError("[Splash] Video playback failed: " + message);
+            TransitionToLoadingScreen();
+        }
+
+        private void TransitionToLoadingScreen()
+        {
+            if (transitioning)
                 return;
 
-            _transitioning = true;
-
-            if (skipButton != null)
-                skipButton.interactable = false;
-
-            if (!string.IsNullOrEmpty(nextSceneName))
-                SceneManager.LoadScene(nextSceneName);
+            transitioning = true;
+            LoadingScreenController.SetTargetScene(nextSceneName);
+            SceneTransitionManager.LoadSceneImmediately(loadingSceneName);
         }
     }
 }

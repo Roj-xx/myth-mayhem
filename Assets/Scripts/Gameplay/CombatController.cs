@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -20,10 +21,16 @@ namespace MythMayhem.Gameplay
         [SerializeField] private bool enableManualCombat = true;
         [SerializeField] private float manualCombatCooldown = 0.5f;
 
+        [Header("Resolution Pacing")]
+        [Tooltip("Seconds a lane's attackers lunge before their damage lands. Lanes resolve one at a time, in order.")]
+        [SerializeField] private float laneResolveDelay = 0.45f;
+
         private float combatTimer;
         private float lastCombatTime = float.NegativeInfinity;
         private bool resolving;
         private bool warnedMissingReferences;
+
+        public bool IsResolving => resolving;
 
         private void Update()
         {
@@ -48,7 +55,7 @@ namespace MythMayhem.Gameplay
             if (Time.time - lastCombatTime < manualCombatCooldown)
                 return;
 
-            ResolveRound(true);
+            StartResolution(true);
         }
 
         private void HandleAutomaticCombat()
@@ -61,38 +68,53 @@ namespace MythMayhem.Gameplay
                 return;
 
             combatTimer = 0f;
-            ResolveRound(false);
+            StartResolution(false);
         }
 
+        // Fire-and-forget entry point used by debug/auto combat.
         public void ResolveCombatRound()
         {
-            ResolveRound(false);
+            StartResolution(false);
         }
 
-        private void ResolveRound(bool announceWhenEmpty)
+        // Awaitable entry point used by the turn / network flow so the turn only
+        // advances once every lane has finished resolving.
+        public IEnumerator ResolveCombatRoundRoutine()
+        {
+            yield return RunResolution(false);
+        }
+
+        private void StartResolution(bool announceWhenEmpty)
+        {
+            StartCoroutine(RunResolution(announceWhenEmpty));
+        }
+
+        private IEnumerator RunResolution(bool announceWhenEmpty)
         {
             if (resolving)
-                return;
+                yield break;
 
             if (playerController == null || opponentController == null)
             {
                 WarnMissingReferences();
-                return;
+                yield break;
             }
 
             resolving = true;
             try
             {
-                ResolveLanes(announceWhenEmpty);
-                lastCombatTime = Time.time;
+                yield return ResolveLanes(announceWhenEmpty);
             }
             finally
             {
                 resolving = false;
+                lastCombatTime = Time.time;
             }
         }
 
-        private void ResolveLanes(bool announceWhenEmpty)
+        // Resolves the lanes one at a time: the attackers in a lane lunge (face to
+        // face) and their damage lands before the next lane is processed.
+        private IEnumerator ResolveLanes(bool announceWhenEmpty)
         {
             int clashes = 0;
             int playerHeroDamage = 0;
@@ -114,6 +136,10 @@ namespace MythMayhem.Gameplay
                     int playerDamage = player.Attack + playerBonus;
                     int opponentDamage = opponent.Attack + opponentBonus;
 
+                    player.PlayAttack();
+                    opponent.PlayAttack();
+                    yield return new WaitForSeconds(laneResolveDelay);
+
                     player.TakeDamage(opponentDamage);
                     opponent.TakeDamage(playerDamage);
                     clashes++;
@@ -122,6 +148,9 @@ namespace MythMayhem.Gameplay
 
                 if (playerAlive)
                 {
+                    player.PlayAttack();
+                    yield return new WaitForSeconds(laneResolveDelay);
+
                     BuildingInstance enemyBuilding = cardPlay != null ? cardPlay.GetBuilding(CreatureSide.Opponent, lane) : null;
                     if (enemyBuilding != null && enemyBuilding.IsAlive)
                     {
@@ -138,6 +167,9 @@ namespace MythMayhem.Gameplay
 
                 if (opponentAlive)
                 {
+                    opponent.PlayAttack();
+                    yield return new WaitForSeconds(laneResolveDelay);
+
                     BuildingInstance enemyBuilding = cardPlay != null ? cardPlay.GetBuilding(CreatureSide.Player, lane) : null;
                     if (enemyBuilding != null && enemyBuilding.IsAlive)
                     {

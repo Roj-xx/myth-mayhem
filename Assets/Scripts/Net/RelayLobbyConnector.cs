@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -9,6 +10,7 @@ using Unity.Services.Authentication;
 using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using MythMayhem.Gameplay;
+using MythMayhem.UI;
 
 namespace MythMayhem.Net
 {
@@ -16,7 +18,8 @@ namespace MythMayhem.Net
     // Relay join code doubles as the lobby code (no separate Lobby service).
     public class RelayLobbyConnector : MonoBehaviour, ILobbyConnector
     {
-        public const string BattleSceneName = "SampleScene";
+        public const string BattleSceneName = "PlayWithAI";
+        private const string LoadingSceneName = "LoadingScreen";
 
         public static RelayLobbyConnector Instance { get; private set; }
 
@@ -69,12 +72,16 @@ namespace MythMayhem.Net
         private void OnDestroy()
         {
             if (networkManager != null)
+            {
                 networkManager.OnClientConnectedCallback -= HandleClientConnected;
+                if (networkManager.SceneManager != null)
+                    networkManager.SceneManager.OnSceneEvent -= HandleSceneEvent;
+            }
 
             if (Instance == this)
                 Instance = null;
 
-            if (LobbyConnectorLocator.Current == this)
+            if (ReferenceEquals(LobbyConnectorLocator.Current, this))
                 LobbyConnectorLocator.Current = null;
         }
 
@@ -87,12 +94,55 @@ namespace MythMayhem.Net
                 return;
 
             // Wait until the remote peer actually finished connecting before the
-            // host swaps to the battle scene; the client follows via scene sync.
+            // host opens a synchronized loading screen.
             if (networkManager.ConnectedClientsIds.Count < 2)
                 return;
 
             pendingHostSceneLoad = false;
+            SceneTransitionManager.FadeOutForNetworkSceneLoad();
+            StartCoroutine(LoadNetworkLoadingScene());
+        }
+
+        private IEnumerator LoadNetworkLoadingScene()
+        {
+            yield return new WaitForSecondsRealtime(0.5f);
+            if (networkManager == null || !networkManager.IsServer || networkManager.SceneManager == null)
+            {
+                Debug.LogError("[PvP] Cannot show the loading screen because network scene management is unavailable.");
+                yield break;
+            }
+
+            networkManager.SceneManager.LoadScene(LoadingSceneName, LoadSceneMode.Single);
+        }
+
+        private IEnumerator LoadNetworkBattleScene()
+        {
+            yield return new WaitForSecondsRealtime(1f);
+            if (networkManager == null || !networkManager.IsServer || networkManager.SceneManager == null)
+            {
+                Debug.LogError("[PvP] Cannot load the match because network scene management is unavailable.");
+                yield break;
+            }
+
             networkManager.SceneManager.LoadScene(BattleSceneName, LoadSceneMode.Single);
+        }
+
+        private void HandleLoadEventCompleted(string sceneName, LoadSceneMode loadSceneMode, System.Collections.Generic.List<ulong> clientsCompleted, System.Collections.Generic.List<ulong> clientsTimedOut)
+        {
+            if (!networkManager.IsServer || sceneName != LoadingSceneName)
+                return;
+
+            if (clientsTimedOut.Count > 0)
+                Debug.LogError("[PvP] One or more players timed out while loading the loading screen.");
+
+            SceneTransitionManager.FadeOutForNetworkSceneLoad();
+            StartCoroutine(LoadNetworkBattleScene());
+        }
+
+        private void HandleSceneEvent(SceneEvent sceneEvent)
+        {
+            if (!networkManager.IsServer && sceneEvent.SceneEventType == SceneEventType.Load)
+                SceneTransitionManager.FadeOutForNetworkSceneLoad();
         }
 
         private void HandleClientConnected(ulong clientId)
@@ -133,6 +183,7 @@ namespace MythMayhem.Net
             if (!networkManager.StartHost())
                 throw new Exception("Failed to start Relay host.");
 
+            SubscribeSceneEvents();
             return JoinCode;
         }
 
@@ -159,12 +210,43 @@ namespace MythMayhem.Net
 
             if (!networkManager.StartClient())
                 throw new Exception("Failed to start Relay client.");
+
+            SubscribeSceneEvents();
+        }
+
+        private void SubscribeSceneEvents()
+        {
+            if (networkManager.SceneManager != null)
+            {
+                networkManager.SceneManager.OnSceneEvent -= HandleSceneEvent;
+                networkManager.SceneManager.OnSceneEvent += HandleSceneEvent;
+                networkManager.SceneManager.OnLoadEventCompleted -= HandleLoadEventCompleted;
+                networkManager.SceneManager.OnLoadEventCompleted += HandleLoadEventCompleted;
+            }
+        }
+
+        public void LoadNetworkMatch()
+        {
+            if (networkManager == null || !networkManager.IsServer || networkManager.SceneManager == null)
+            {
+                Debug.LogError("[PvP] Cannot restart because network scene management is unavailable.");
+                return;
+            }
+
+            pendingHostSceneLoad = false;
+            SceneTransitionManager.FadeOutForNetworkSceneLoad();
+            StartCoroutine(LoadNetworkLoadingScene());
         }
 
         public void Shutdown()
         {
             pendingHostSceneLoad = false;
             JoinCode = null;
+            if (networkManager != null && networkManager.SceneManager != null)
+            {
+                networkManager.SceneManager.OnSceneEvent -= HandleSceneEvent;
+                networkManager.SceneManager.OnLoadEventCompleted -= HandleLoadEventCompleted;
+            }
 
             if (networkManager != null && (networkManager.IsServer || networkManager.IsClient))
                 networkManager.Shutdown();

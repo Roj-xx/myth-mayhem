@@ -1,8 +1,11 @@
 using System.Collections;
 using UnityEngine;
 using Unity.Netcode;
+using UnityEngine.SceneManagement;
+using MythMayhem.Audio;
 using MythMayhem.Board;
 using MythMayhem.Gameplay;
+using MythMayhem.UI;
 
 namespace MythMayhem.Net
 {
@@ -29,6 +32,7 @@ namespace MythMayhem.Net
         private CardDefinitionLookup lookup;
         private CreatureSide lastActiveSide;
         private int revision;
+        private bool endingTurn;
 
         public override void OnNetworkSpawn()
         {
@@ -51,7 +55,7 @@ namespace MythMayhem.Net
 
         public override void OnNetworkDespawn()
         {
-            if (NetworkSession.Intents == (IMatchIntentSink)this)
+            if (ReferenceEquals(NetworkSession.Intents, this))
                 NetworkSession.Intents = null;
         }
 
@@ -115,6 +119,14 @@ namespace MythMayhem.Net
                 RequestEndTurnServerRpc();
         }
 
+        public void RestartMatch()
+        {
+            if (IsServer)
+                LoadMatchScene();
+            else
+                RestartMatchServerRpc();
+        }
+
         // --- Server RPCs (client -> host) ---
 
         [ServerRpc(RequireOwnership = false)]
@@ -139,6 +151,12 @@ namespace MythMayhem.Net
         private void RequestEndTurnServerRpc(ServerRpcParams rpcParams = default)
         {
             ApplyEndTurn(SideOf(rpcParams.Receive.SenderClientId));
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        private void RestartMatchServerRpc()
+        {
+            LoadMatchScene();
         }
 
         [ServerRpc(RequireOwnership = false)]
@@ -209,30 +227,54 @@ namespace MythMayhem.Net
                 return false;
 
             turnManager.Spend(side, support.Cost);
+            PlaySupportSoundClientRpc();
             BroadcastSnapshot();
             return true;
         }
 
+        [ClientRpc]
+        private void PlaySupportSoundClientRpc()
+        {
+            AudioManager.PlaySpawnSound();
+        }
+
         private void ApplyEndTurn(CreatureSide side)
         {
+            if (endingTurn)
+                return;
+
             if (turnManager == null || matchController == null || matchController.IsMatchOver)
                 return;
 
             if (turnManager.ActiveSide != side)
                 return;
 
-            if (combat != null)
-                combat.ResolveCombatRound();
+            endingTurn = true;
+            StartCoroutine(ApplyEndTurnRoutine(side));
+        }
 
-            if (matchController.IsMatchOver)
+        // Resolves combat lane by lane, then advances the turn and replicates the result.
+        private IEnumerator ApplyEndTurnRoutine(CreatureSide side)
+        {
+            try
             {
-                BroadcastSnapshot();
-                return;
-            }
+                if (combat != null)
+                    yield return combat.ResolveCombatRoundRoutine();
 
-            CreatureSide next = Other(side);
-            turnManager.NetworkAdvanceTurn(next);
-            BroadcastSnapshot();
+                if (matchController.IsMatchOver)
+                {
+                    BroadcastSnapshot();
+                    yield break;
+                }
+
+                CreatureSide next = Other(side);
+                turnManager.NetworkAdvanceTurn(next);
+                BroadcastSnapshot();
+            }
+            finally
+            {
+                endingTurn = false;
+            }
         }
 
         private bool CanAct(CreatureSide side)
@@ -251,6 +293,27 @@ namespace MythMayhem.Net
         private static CreatureSide Other(CreatureSide side)
         {
             return side == CreatureSide.Player ? CreatureSide.Opponent : CreatureSide.Player;
+        }
+
+        private void LoadMatchScene()
+        {
+            if (matchController == null || !matchController.IsMatchOver)
+                return;
+
+            if (NetworkManager == null || NetworkManager.SceneManager == null)
+            {
+                Debug.LogError("[PvP] Cannot restart because network scene management is unavailable.");
+                return;
+            }
+
+            RelayLobbyConnector connector = RelayLobbyConnector.Instance;
+            if (connector == null)
+            {
+                Debug.LogError("[PvP] Cannot restart because the Relay lobby connector is unavailable.");
+                return;
+            }
+
+            connector.LoadNetworkMatch();
         }
 
         // --- Snapshot replication ---

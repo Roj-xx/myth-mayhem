@@ -13,6 +13,7 @@ namespace MythMayhem.Gameplay
     public class SupportCardDefinition : ScriptableObject
     {
         [SerializeField] private string displayName = "Support";
+        [SerializeField] private Sprite artwork;
         [SerializeField] private int cost = 1;
         [SerializeField] private SupportEffectType effectType = SupportEffectType.FriendlyAttackBuff;
         [SerializeField] private int magnitude = 5;
@@ -20,6 +21,7 @@ namespace MythMayhem.Gameplay
         [SerializeField] private string description = "";
 
         public string DisplayName => displayName;
+        public Sprite Artwork => artwork;
         public int Cost => cost;
         public SupportEffectType EffectType => effectType;
         public int Magnitude => magnitude;

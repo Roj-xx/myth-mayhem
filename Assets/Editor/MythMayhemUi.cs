@@ -30,7 +30,7 @@ namespace MythMayhem.EditorTools
         public static readonly Color GlowBlue = new Color(0.22f, 0.40f, 0.90f, 0.32f);
         public static readonly Color GlowRed = new Color(0.62f, 0.14f, 0.18f, 0.28f);
 
-        public const string GeneratedFolder = "Assets/Generated";
+        public const string GeneratedFolder = "Assets/Art/UI";
         public const float ReferenceWidth = 1080f;
         public const float ReferenceHeight = 1920f;
 
@@ -98,8 +98,18 @@ namespace MythMayhem.EditorTools
 
         private static void EnsureGeneratedFolder()
         {
-            if (!AssetDatabase.IsValidFolder(GeneratedFolder))
-                AssetDatabase.CreateFolder("Assets", "Generated");
+            if (AssetDatabase.IsValidFolder(GeneratedFolder))
+                return;
+
+            string[] parts = GeneratedFolder.Split('/');
+            string current = parts[0];
+            for (int i = 1; i < parts.Length; i++)
+            {
+                string next = current + "/" + parts[i];
+                if (!AssetDatabase.IsValidFolder(next))
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                current = next;
+            }
         }
 
         private static void ConfigureTexture(string path)

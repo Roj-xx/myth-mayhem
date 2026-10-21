@@ -1,4 +1,5 @@
 using UnityEngine;
+using MythMayhem.Audio;
 
 namespace MythMayhem.Gameplay
 {
@@ -23,6 +24,11 @@ namespace MythMayhem.Gameplay
 
         private int attackModifier;
         private int attackModifierTurns;
+        private Animator animator;
+        private CreatureVisualAnimator visualAnimator;
+        private const float DeathAnimationDuration = 2f;
+        private static readonly int AttackTrigger = Animator.StringToHash("Attack");
+        private static readonly int DeathTrigger = Animator.StringToHash("Death");
 
         public bool IsAlive => CurrentHealth > 0;
         public string DisplayName => Definition != null ? Definition.DisplayName : name;
@@ -37,6 +43,8 @@ namespace MythMayhem.Gameplay
             attackModifier = 0;
             attackModifierTurns = 0;
             CurrentHealth = MaxHealth;
+            animator = GetComponentInChildren<Animator>();
+            visualAnimator = GetComponent<CreatureVisualAnimator>();
         }
 
         // Rebuilds a creature from a replicated snapshot (used by joining clients).
@@ -97,7 +105,32 @@ namespace MythMayhem.Gameplay
             CurrentHealth = Mathf.Max(0, CurrentHealth - amount);
 
             if (CurrentHealth == 0)
-                Destroy(gameObject);
+            {
+                AudioManager.PlayDeathSound();
+                PlayDeath();
+            }
+        }
+
+        // Plays the creature's attack take; called by the combat resolver when it
+        // attacks (whether into a creature, a building, or the enemy hero).
+        public void PlayAttack()
+        {
+            if (animator != null && animator.isActiveAndEnabled)
+                animator.SetTrigger(AttackTrigger);
+
+            if (visualAnimator != null)
+                visualAnimator.PlayAttack();
+        }
+
+        private void PlayDeath()
+        {
+            if (animator != null && animator.isActiveAndEnabled)
+                animator.SetTrigger(DeathTrigger);
+
+            if (visualAnimator != null)
+                visualAnimator.PlayDeath();
+
+            Destroy(gameObject, DeathAnimationDuration);
         }
 
         private void OnDestroy()
