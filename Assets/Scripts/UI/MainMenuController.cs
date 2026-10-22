@@ -7,6 +7,7 @@ namespace MythMayhem.UI
     {
         [SerializeField] private string battleSceneName = "PlayWithAI";
         [SerializeField] private string pvpLobbySceneName = "PvPLobby";
+        [SerializeField] private string tutorialSceneName = "Tutorial";
         [SerializeField] private GameObject messageOverlay;
         [SerializeField] private Text messageTitle;
         [SerializeField] private Text messageBody;
@@ -21,9 +22,13 @@ namespace MythMayhem.UI
 
         public void ShowTutorial()
         {
-            ShowMessage(
-                "TUTORIAL",
-                "A guided tutorial is coming soon.\n\nUntil then, learn the flow in a match against the AI.");
+            if (string.IsNullOrWhiteSpace(tutorialSceneName))
+            {
+                Debug.LogError("[MainMenu] Tutorial scene name is not set.");
+                return;
+            }
+
+            SceneTransitionManager.LoadSceneWithFade(tutorialSceneName);
         }
 
         public void ShowPvp()

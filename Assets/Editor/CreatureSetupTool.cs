@@ -67,7 +67,7 @@ namespace MythMayhem.EditorTools
             new CreatureSpec("Kapre", "Kapre", "Meshy_AI_Ancient_Troll_Rigged_biped_Meshy_Merged_Animations", "Meshy_AI_Ancient_Troll_Rigged_biped", 2.2f),
             new CreatureSpec("Tikbalang", "Tikbalang", "Meshy_AI_Tikbalang_Rigged_biped_Meshy_Merged_Animations", "Meshy_AI_Tikbalang_Rigged_biped", 2.0f),
             new CreatureSpec("Manananggal", "Manananggal", "Meshy_AI_Manananggal_3D_biped_Meshy_Merged_Animations", "Meshy_AI_Manananggal_3D_biped", 1.9f),
-            new CreatureSpec("Bakunawa", "Bakunawa", "Meshy_AI_Bakunawa_LowPoly_Opti_1016031641_texture", "Meshy_AI_Bakunawa_LowPoly_Opti_1016031641", 2.4f, false),
+            new CreatureSpec("Bakunawa", "Bakunawa", "Meshy_AI_Bakunawa_LowPoly_Opti_1016031641_texture", "Meshy_AI_Bakunawa_LowPoly_Opti_1016031641", 4.55f, false),
         };
 
         public static void SetupCreatures()

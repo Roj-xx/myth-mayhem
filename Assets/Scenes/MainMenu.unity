@@ -1310,6 +1310,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::MythMayhem.UI.MainMenuController
   battleSceneName: PlayWithAI
   pvpLobbySceneName: PvPLobby
+  tutorialSceneName: Tutorial
   messageOverlay: {fileID: 0}
   messageTitle: {fileID: 0}
   messageBody: {fileID: 0}

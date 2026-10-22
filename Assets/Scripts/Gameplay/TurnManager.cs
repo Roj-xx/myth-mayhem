@@ -257,7 +257,7 @@ namespace MythMayhem.Gameplay
 
             if (summonPointsLabel != null)
             {
-                CreatureSide shown = NetworkSession.IsNetworked ? NetworkSession.LocalSide : activeSide;
+                CreatureSide shown = NetworkSession.IsNetworked ? NetworkSession.LocalSide : CreatureSide.Player;
                 summonPointsLabel.text = "Summon Points: " + GetPoints(shown);
             }
         }

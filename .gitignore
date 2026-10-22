@@ -111,3 +111,12 @@ InitTestScene*.unity*
 # Large AI-generated battle arena model (kept local only, exceeds git limits)
 /Assets/Art/Arena/
 /Assets/Art/Arena.meta
+
+# Unity "Terrain Sample Assets" package copy (kept local only, ~1.9 GB of textures).
+# Re-import it from the Asset Store, then run "Myth Mayhem/Create Editable Arena Terrain".
+/Assets/TerrainSampleAssets/
+/Assets/TerrainSampleAssets.meta
+
+# HDRP default resources (regenerated automatically by Unity on package import)
+/Assets/HDRPDefaultResources/
+/Assets/HDRPDefaultResources.meta

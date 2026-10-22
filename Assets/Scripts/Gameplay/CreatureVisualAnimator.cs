@@ -49,7 +49,7 @@ namespace MythMayhem.Gameplay
             baseScale = visual.localScale;
             baseLocalPosition = visual.localPosition;
             baseLocalRotation = visual.localRotation;
-            spawnTime = root.GetComponentInChildren<SkinnedMeshRenderer>() != null ? 0f : spawnDuration;
+            spawnTime = 0f;
             bound = true;
             Apply();
         }

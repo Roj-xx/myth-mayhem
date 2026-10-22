@@ -12,6 +12,9 @@ EditorBuildSettings:
     path: Assets/Scenes/MainMenu.unity
     guid: fe3922bb0d494604aade45f1cf8a4bab
   - enabled: 1
+    path: Assets/Scenes/Tutorial.unity
+    guid: 52d096fe1cb595b47aedf1ca28270df7
+  - enabled: 1
     path: Assets/Scenes/PvPLobby.unity
     guid: e5292840dddd63d499cd0a6d676c6332
   - enabled: 1
