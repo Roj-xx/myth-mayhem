@@ -15,6 +15,7 @@ namespace MythMayhem.Gameplay
         [SerializeField] private Sprite opponentHpBarSprite;
         [SerializeField] private Sprite victoryBannerSprite;
         [SerializeField] private Sprite defeatBannerSprite;
+        [SerializeField] private Sprite drawBannerSprite;
         [SerializeField] private Image playerHpBarFill;
         [SerializeField] private Text playerHpText;
         [SerializeField] private Image opponentHpBarFill;
@@ -71,6 +72,8 @@ namespace MythMayhem.Gameplay
                 victoryBannerSprite = LoadGameSprite("VictoryBanner");
             if (defeatBannerSprite == null)
                 defeatBannerSprite = LoadGameSprite("DefeatBanner");
+            if (drawBannerSprite == null)
+                drawBannerSprite = LoadGameSprite("DrawBanner");
 
             if (playerHpBarFill == null || opponentHpBarFill == null)
                 BuildHpBars();
@@ -113,6 +116,8 @@ namespace MythMayhem.Gameplay
                 victoryBannerSprite = LoadGameSprite("VictoryBanner");
             if (defeatBannerSprite == null)
                 defeatBannerSprite = LoadGameSprite("DefeatBanner");
+            if (drawBannerSprite == null)
+                drawBannerSprite = LoadGameSprite("DrawBanner");
 
             // Only build what the scene doesn't already provide, so a baked-in HUD
             // (editable in the Scene view) is reused instead of duplicated.
@@ -196,6 +201,8 @@ namespace MythMayhem.Gameplay
                 banner = victoryBannerSprite;
             else if (outcome == MatchOutcome.OpponentWin)
                 banner = defeatBannerSprite;
+            else if (outcome == MatchOutcome.Draw)
+                banner = drawBannerSprite;
 
             if (gameOverBanner != null)
             {
@@ -359,6 +366,7 @@ namespace MythMayhem.Gameplay
 
             victoryBannerSprite = LoadGameSprite("VictoryBanner");
             defeatBannerSprite = LoadGameSprite("DefeatBanner");
+            drawBannerSprite = LoadGameSprite("DrawBanner");
 
             GameObject bannerGo = new GameObject("GameOverBanner", typeof(RectTransform));
             bannerGo.transform.SetParent(panelRect, false);

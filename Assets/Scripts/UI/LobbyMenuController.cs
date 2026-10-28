@@ -25,6 +25,10 @@ namespace MythMayhem.UI
 
         public static LobbyMenuController Instance { get; private set; }
 
+        private const string DefaultStatus = "Create a lobby, or enter a friend's code to join.";
+
+        private ILobbyConnector subscribedConnector;
+
         // Returns the existing lobby, or creates one on the fly so callers never
         // need a scene reference.
         public static LobbyMenuController GetOrCreate()
@@ -44,17 +48,13 @@ namespace MythMayhem.UI
             WireButtons();
             SetPanelVisible(showOnStart);
 
-            if (showOnStart)
-            {
-                SetBusy(false);
-                SetStatus(LobbyConnectorLocator.Available
-                    ? "Create a lobby, or enter a friend's code to join."
-                    : "Online play is not available in this build.");
-            }
+            Subscribe(LobbyConnectorLocator.Current);
         }
 
         private void OnDestroy()
         {
+            Unsubscribe();
+
             if (Instance == this)
                 Instance = null;
         }
@@ -64,18 +64,13 @@ namespace MythMayhem.UI
             SetPanelVisible(true);
             AudioManager.SetPvpLobbyOpen(true);
 
-            if (codeLabel != null)
-                codeLabel.text = string.Empty;
-
-            SetBusy(false);
-            SetStatus(LobbyConnectorLocator.Available
-                ? "Create a lobby, or enter a friend's code to join."
-                : "Online play is not available in this build.");
+            Subscribe(LobbyConnectorLocator.Current);
         }
 
         public void Close()
         {
             LobbyConnectorLocator.Current?.Shutdown();
+            Unsubscribe();
             SetPanelVisible(false);
             AudioManager.SetPvpLobbyOpen(false);
         }
@@ -83,15 +78,13 @@ namespace MythMayhem.UI
         public void BackToMenu()
         {
             LobbyConnectorLocator.Current?.Shutdown();
+            Unsubscribe();
             AudioManager.SetPvpLobbyOpen(false);
             SceneTransitionManager.LoadScene("MainMenu");
         }
 
         public async void CreateLobby()
         {
-            SetBusy(true);
-            SetStatus("Creating lobby...");
-
             ILobbyConnector connector = null;
             try
             {
@@ -99,12 +92,18 @@ namespace MythMayhem.UI
                 if (connector == null)
                     throw new InvalidOperationException("Networking is unavailable.");
 
+                Subscribe(connector);
+                SetBusy(true);
+
                 string code = await connector.CreateLobbyAsync(1);
+
+                // A null code means the attempt was cancelled (the player left
+                // the lobby while the relay allocation was in flight).
+                if (string.IsNullOrEmpty(code))
+                    return;
 
                 if (codeLabel != null)
                     codeLabel.text = "CODE: " + code;
-
-                SetStatus("Share the code, then wait for your opponent to join.");
             }
             catch (Exception e)
             {
@@ -117,9 +116,6 @@ namespace MythMayhem.UI
 
         public async void JoinLobby()
         {
-            SetBusy(true);
-            SetStatus("Joining...");
-
             ILobbyConnector connector = null;
             try
             {
@@ -127,9 +123,13 @@ namespace MythMayhem.UI
                 if (connector == null)
                     throw new InvalidOperationException("Networking is unavailable.");
 
+                Subscribe(connector);
+                SetBusy(true);
+
                 string code = codeInput != null ? codeInput.text : string.Empty;
+                // The connector reports progress ("Connecting…", "Connected…")
+                // once the handshake actually completes; never before.
                 await connector.JoinLobbyAsync(code);
-                SetStatus("Connected. Loading battle...");
             }
             catch (Exception e)
             {
@@ -148,6 +148,84 @@ namespace MythMayhem.UI
             string code = codeLabel.text.Replace("CODE: ", string.Empty);
             if (!string.IsNullOrEmpty(code))
                 GUIUtility.systemCopyBuffer = code;
+        }
+
+        // Follows the connector that actually owns the session. Re-subscribing is
+        // harmless: the old handler is always detached first.
+        private void Subscribe(ILobbyConnector connector)
+        {
+            if (ReferenceEquals(connector, subscribedConnector))
+            {
+                RefreshFromConnector();
+                return;
+            }
+
+            Unsubscribe();
+
+            subscribedConnector = connector;
+            if (subscribedConnector != null)
+                subscribedConnector.StateChanged += HandleLobbyStatus;
+
+            RefreshFromConnector();
+        }
+
+        private void Unsubscribe()
+        {
+            if (subscribedConnector == null)
+                return;
+
+            subscribedConnector.StateChanged -= HandleLobbyStatus;
+            subscribedConnector = null;
+        }
+
+        private void RefreshFromConnector()
+        {
+            ILobbyConnector connector = subscribedConnector != null
+                ? subscribedConnector
+                : LobbyConnectorLocator.Current;
+
+            if (connector == null)
+            {
+                SetBusy(false);
+                SetStatus(LobbyConnectorLocator.Available
+                    ? DefaultStatus
+                    : "Online play is not available in this build.");
+                ClearCode();
+                return;
+            }
+
+            ApplyStatus(connector.LastStatus);
+        }
+
+        private void HandleLobbyStatus(LobbyStatus status)
+        {
+            ApplyStatus(status);
+        }
+
+        private void ApplyStatus(LobbyStatus status)
+        {
+            if (status.State == LobbyConnectionState.Idle || status.State == LobbyConnectionState.Failed)
+                ClearCode();
+
+            string message = status.Message;
+            if (string.IsNullOrEmpty(message))
+            {
+                message = status.State == LobbyConnectionState.Failed
+                    ? "The connection failed. Please try again."
+                    : DefaultStatus;
+            }
+
+            SetStatus(message);
+
+            // Busy states lock the controls; Failed/Idle hand them back so the
+            // player can retry without leaving the screen.
+            SetBusy(status.IsBusy);
+        }
+
+        private void ClearCode()
+        {
+            if (codeLabel != null)
+                codeLabel.text = string.Empty;
         }
 
         private void SetBusy(bool busy)

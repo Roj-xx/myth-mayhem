@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using MythMayhem.Gameplay;
 
 namespace MythMayhem.Cinematic
@@ -107,6 +108,7 @@ namespace MythMayhem.Cinematic
         [SerializeField] private Camera gameplayCamera;
         [SerializeField] private Canvas gameplayCanvas;
         [SerializeField] private bool playSequenceOnSceneLoad = true;
+        [SerializeField] private GameObject skipHintRoot;
         [SerializeField] private List<CinematicShot> shots = new List<CinematicShot>();
 
         private readonly List<CinemachineCamera> shotCameras = new List<CinemachineCamera>();
@@ -116,6 +118,7 @@ namespace MythMayhem.Cinematic
         private CinemachineCamera restoreCamera;
         private CinemachineCamera previousCamera;
         private Coroutine playback;
+        private bool skipRequested;
         private bool originalCameraEnabled;
         private bool originalBrainEnabled;
         private bool originalBrainIgnoreTimeScale;
@@ -181,6 +184,7 @@ namespace MythMayhem.Cinematic
 
         private void Start()
         {
+            skipRequested = false;
             if (playSequenceOnSceneLoad && !NetworkSession.IsNetworked && shots != null && shots.Count > 0)
                 introRoutine = StartCoroutine(PlayIntroOnSceneLoad());
         }
@@ -207,6 +211,8 @@ namespace MythMayhem.Cinematic
 
         public void StopPlayback()
         {
+            skipRequested = true;
+
             if (introRoutine != null)
             {
                 StopCoroutine(introRoutine);
@@ -219,6 +225,7 @@ namespace MythMayhem.Cinematic
                 playback = null;
             }
 
+            SetSkipHintVisible(false);
             RestoreCameraState();
             RestoreGameplayInput();
         }
@@ -246,6 +253,7 @@ namespace MythMayhem.Cinematic
 
         private IEnumerator PlayIntroOnSceneLoad()
         {
+            skipRequested = false;
             SetGameplayInputLocked(true);
             yield return null;
             introRoutine = null;
@@ -265,7 +273,14 @@ namespace MythMayhem.Cinematic
 
             CaptureCameraState();
             PrepareCinemachine();
+            SetSkipHintVisible(true);
             playback = StartCoroutine(PlaybackRoutine(0, false));
+        }
+
+        private void SetSkipHintVisible(bool visible)
+        {
+            if (skipHintRoot != null && skipHintRoot.activeSelf != visible)
+                skipHintRoot.SetActive(visible);
         }
 
         private void SetGameplayInputLocked(bool locked)
@@ -364,6 +379,9 @@ namespace MythMayhem.Cinematic
             float finalBlendDuration = 0f;
             for (int i = startIndex; i < endIndex; i++)
             {
+                if (skipRequested)
+                    break;
+
                 CinematicShot shot = shots[i];
                 if (shot == null || !shot.enabled)
                     continue;
@@ -387,6 +405,22 @@ namespace MythMayhem.Cinematic
                 float duration = Mathf.Max(0.1f, shot.duration);
                 while (elapsed < duration && active != null)
                 {
+                    if (skipRequested)
+                        break;
+
+                    bool skipped = false;
+                    if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame)
+                        skipped = true;
+                    if (!skipped && Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+                        skipped = true;
+                    if (!skipped && Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+                        skipped = true;
+                    if (skipped)
+                    {
+                        skipRequested = true;
+                        break;
+                    }
+
                     elapsed += Time.unscaledDeltaTime;
                     float normalized = Mathf.Clamp01(elapsed / duration);
                     float eased = EvaluateEasing(shot.easing, normalized);
@@ -410,7 +444,7 @@ namespace MythMayhem.Cinematic
                 finalBlendDuration = GetTransitionDuration(shot);
             }
 
-            if (restoreCamera != null)
+            if (restoreCamera != null && !skipRequested)
             {
                 SetBlend(finalBlendDuration);
                 restoreCamera.Priority = ++nextPriority;
@@ -421,8 +455,7 @@ namespace MythMayhem.Cinematic
             }
 
             playback = null;
-            RestoreCameraState();
-            RestoreGameplayInput();
+            StopPlayback();
         }
 
         private CinemachineCamera CreateVirtualCamera(string cameraName, Vector3 position, Quaternion rotation, float fieldOfView)

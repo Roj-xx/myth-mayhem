@@ -22,7 +22,13 @@ namespace MythMayhem.Gameplay
         [SerializeField] private DeckController playerDeck;
         [SerializeField] private DeckController opponentDeck;
 
+        [Header("Turn Timer")]
+        [SerializeField] private float turnTimeLimitSeconds = 60f;
+        [SerializeField] private float countdownWarningSeconds = 10f;
+
         private CreatureSide activeSide = CreatureSide.Player;
+        private float turnStartTime;
+        private string normalTurnLabelText = string.Empty;
         private int playerPoints;
         private int opponentPoints;
         private bool openingTurn;
@@ -30,6 +36,8 @@ namespace MythMayhem.Gameplay
         private bool turnTransitioning;
         private bool playerStartedFirstTurn;
         private bool opponentStartedFirstTurn;
+        private bool paused;
+        private float pauseStartedAt;
 
         public CreatureSide ActiveSide => activeSide;
         public event Action TurnBegan;
@@ -42,6 +50,7 @@ namespace MythMayhem.Gameplay
             openingTurn = true;
             playerStartedFirstTurn = true;
             opponentStartedFirstTurn = false;
+            turnStartTime = Time.unscaledTime;
 
             SetPoints(CreatureSide.Player, startingSummonPoints);
             SetPoints(CreatureSide.Opponent, startingSummonPoints);
@@ -98,7 +107,10 @@ namespace MythMayhem.Gameplay
         // Applies the authoritative turn/points from a replicated snapshot.
         public void NetworkApplyState(CreatureSide active, int playerPointsValue, int opponentPointsValue)
         {
+            bool sideChanged = activeSide != active;
             activeSide = active;
+            if (sideChanged)
+                turnStartTime = Time.unscaledTime;
             SetPoints(CreatureSide.Player, playerPointsValue);
             SetPoints(CreatureSide.Opponent, opponentPointsValue);
             RefreshLabels();
@@ -112,6 +124,7 @@ namespace MythMayhem.Gameplay
         public void NetworkAdvanceTurn(CreatureSide newActiveSide)
         {
             activeSide = newActiveSide;
+            turnStartTime = Time.unscaledTime;
             AwardTurnStartPoints(newActiveSide);
             RefreshLabels();
 
@@ -124,6 +137,30 @@ namespace MythMayhem.Gameplay
         public bool IsActive(CreatureSide side)
         {
             return side == activeSide;
+        }
+
+        // The turn clock uses unscaled time so it keeps ticking while the game
+        // is running at a non-standard time scale. While paused, compensate the
+        // start time on resume so the remaining time is preserved.
+        public void SetPaused(bool value)
+        {
+            if (paused == value)
+                return;
+
+            paused = value;
+
+            if (value)
+            {
+                pauseStartedAt = Time.unscaledTime;
+                return;
+            }
+
+            // If a networked snapshot started a new turn while paused, give it a
+            // fresh clock from the resume moment instead of eating the pause time.
+            if (turnStartTime <= pauseStartedAt)
+                turnStartTime += Time.unscaledTime - pauseStartedAt;
+            else
+                turnStartTime = Time.unscaledTime;
         }
 
         public int GetPoints(CreatureSide side)
@@ -148,7 +185,7 @@ namespace MythMayhem.Gameplay
 
         public void EndTurn()
         {
-            if (turnTransitioning)
+            if (paused || turnTransitioning)
                 return;
 
             if (IsMatchOver)
@@ -181,6 +218,7 @@ namespace MythMayhem.Gameplay
                 openingTurn = false;
 
                 activeSide = activeSide == CreatureSide.Player ? CreatureSide.Opponent : CreatureSide.Player;
+                turnStartTime = Time.unscaledTime;
                 AwardTurnStartPoints(activeSide);
                 RefreshLabels();
 
@@ -194,6 +232,48 @@ namespace MythMayhem.Gameplay
             finally
             {
                 turnTransitioning = false;
+            }
+        }
+
+        private void Update()
+        {
+            if (paused || IsMatchOver)
+                return;
+
+            if (turnTransitioning)
+                return;
+
+            if (turnTimeLimitSeconds <= 0f)
+                return;
+
+            float elapsed = Time.unscaledTime - turnStartTime;
+            if (elapsed >= turnTimeLimitSeconds)
+            {
+                if (NetworkSession.IsNetworked)
+                {
+                    if (NetworkSession.LocalSide == activeSide && NetworkSession.Intents != null)
+                        NetworkSession.Intents.RequestEndTurn();
+                }
+                else
+                {
+                    EndTurn();
+                }
+                return;
+            }
+
+            if (activeSideLabel != null)
+            {
+                float remaining = turnTimeLimitSeconds - elapsed;
+                if (remaining <= countdownWarningSeconds)
+                {
+                    int seconds = Mathf.CeilToInt(remaining);
+                    if (seconds < 0) seconds = 0;
+                    activeSideLabel.text = seconds.ToString();
+                }
+                else if (!string.IsNullOrEmpty(normalTurnLabelText))
+                {
+                    activeSideLabel.text = normalTurnLabelText;
+                }
             }
         }
 
@@ -250,9 +330,10 @@ namespace MythMayhem.Gameplay
             if (activeSideLabel != null)
             {
                 if (NetworkSession.IsNetworked)
-                    activeSideLabel.text = activeSide == NetworkSession.LocalSide ? "Your Turn" : "Enemy Turn";
+                    normalTurnLabelText = activeSide == NetworkSession.LocalSide ? "Your Turn" : "Enemy Turn";
                 else
-                    activeSideLabel.text = activeSide == CreatureSide.Player ? "Player's Turn" : "Opponent's Turn";
+                    normalTurnLabelText = activeSide == CreatureSide.Player ? "Player's Turn" : "Opponent's Turn";
+                activeSideLabel.text = normalTurnLabelText;
             }
 
             if (summonPointsLabel != null)

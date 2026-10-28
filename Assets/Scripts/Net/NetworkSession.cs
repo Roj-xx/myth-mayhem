@@ -16,6 +16,7 @@ namespace MythMayhem.Gameplay
         bool PlayBuilding(string cardName, int lane);
         bool PlaySupport(string cardName, int lane);
         void RequestEndTurn();
+        void Concede();
         void RestartMatch();
     }
 
@@ -26,6 +27,10 @@ namespace MythMayhem.Gameplay
     {
         public static NetworkGameMode Mode = NetworkGameMode.SinglePlayerAI;
         public static IMatchIntentSink Intents;
+
+        // Set when the remote peer is gone (disconnect/transport failure). A lost
+        // session cannot be restarted, so the result screen leaves to the menu.
+        public static bool SessionLost;
 
         public static bool IsNetworked => Mode != NetworkGameMode.SinglePlayerAI;
         public static bool IsHost => Mode == NetworkGameMode.HostPvp;
@@ -44,6 +49,7 @@ namespace MythMayhem.Gameplay
         {
             Mode = NetworkGameMode.SinglePlayerAI;
             Intents = null;
+            SessionLost = false;
         }
     }
 }

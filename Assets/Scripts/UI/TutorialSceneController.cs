@@ -75,6 +75,9 @@ namespace MythMayhem.UI
                 "YOUR TURN",
                 "You begin with 5 summon points. Drag cards from your hand onto a lane to play them, then press End Turn when you are ready. At the start of your next turn, you gain points and draw a card."),
             new TutorialSlide(
+                "TURN TIMER",
+                "Each turn has a 60 second timer. If time runs out before you end your turn, it will end automatically for you. When 10 seconds or less remain, a countdown will appear on the turn label."),
+            new TutorialSlide(
                 "FIGHT AND WIN",
                 "After both players have taken a turn, creatures fight in their lanes. An enemy building can take a hit instead of its hero. Bring the other hero's health to 0 to win; if yours reaches 0, you lose. If both reach 0 together, it is a draw.")
         };

@@ -125,8 +125,17 @@ namespace MythMayhem.Gameplay
 
         public void Restart()
         {
-            if (NetworkSession.IsNetworked && NetworkSession.Intents != null)
+            if (NetworkSession.IsNetworked)
             {
+                if (NetworkSession.SessionLost || NetworkSession.Intents == null)
+                {
+                    // The opponent disconnected, so there is no match left to
+                    // restart. Leave cleanly instead of reloading a dead board.
+                    LobbyConnectorLocator.Current?.Shutdown();
+                    SceneTransitionManager.LoadScene("MainMenu");
+                    return;
+                }
+
                 NetworkSession.Intents.RestartMatch();
                 return;
             }

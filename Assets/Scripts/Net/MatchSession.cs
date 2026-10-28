@@ -33,6 +33,7 @@ namespace MythMayhem.Net
         private CreatureSide lastActiveSide;
         private int revision;
         private bool endingTurn;
+        private NetworkManager subscribedManager;
 
         public override void OnNetworkSpawn()
         {
@@ -41,6 +42,20 @@ namespace MythMayhem.Net
 
             NetworkSession.Intents = this;
             lastActiveSide = turnManager != null ? turnManager.ActiveSide : CreatureSide.Player;
+
+            SubscribeDisconnectEvents();
+
+            // A peer can vanish in the gap between the scene finishing its load
+            // and this object spawning, in which case the disconnect callback is
+            // already gone. Do not strand the remaining player on a dead board.
+            if (NetworkSession.Mode != NetworkGameMode.SinglePlayerAI && !HasRemotePeer())
+            {
+                Debug.LogWarning("[PvP] The opponent is gone; returning to the main menu.");
+                NetworkSession.SessionLost = true;
+                RelayLobbyConnector.Instance?.Shutdown();
+                SceneTransitionManager.LoadScene(RelayLobbyConnector.MainMenuSceneName);
+                return;
+            }
 
             if (IsServer)
             {
@@ -55,6 +70,8 @@ namespace MythMayhem.Net
 
         public override void OnNetworkDespawn()
         {
+            UnsubscribeDisconnectEvents();
+
             if (ReferenceEquals(NetworkSession.Intents, this))
                 NetworkSession.Intents = null;
         }
@@ -119,6 +136,14 @@ namespace MythMayhem.Net
                 RequestEndTurnServerRpc();
         }
 
+        public void Concede()
+        {
+            if (IsServer)
+                ApplyConcede(NetworkSession.LocalSide);
+            else
+                ConcedeServerRpc();
+        }
+
         public void RestartMatch()
         {
             if (IsServer)
@@ -151,6 +176,12 @@ namespace MythMayhem.Net
         private void RequestEndTurnServerRpc(ServerRpcParams rpcParams = default)
         {
             ApplyEndTurn(SideOf(rpcParams.Receive.SenderClientId));
+        }
+
+        [ServerRpc(RequireOwnership = false)]
+        private void ConcedeServerRpc(ServerRpcParams rpcParams = default)
+        {
+            ApplyConcede(SideOf(rpcParams.Receive.SenderClientId));
         }
 
         [ServerRpc(RequireOwnership = false)]
@@ -275,6 +306,21 @@ namespace MythMayhem.Net
             {
                 endingTurn = false;
             }
+        }
+
+        // Conceding is host-authoritative: the sender's side loses, and the
+        // resulting snapshot carries the outcome to both peers.
+        private void ApplyConcede(CreatureSide side)
+        {
+            if (matchController == null || matchController.IsMatchOver)
+                return;
+
+            MatchOutcome result = side == CreatureSide.Player
+                ? MatchOutcome.OpponentWin
+                : MatchOutcome.PlayerWin;
+
+            matchController.EndMatch(result);
+            BroadcastSnapshot();
         }
 
         private bool CanAct(CreatureSide side)
@@ -405,6 +451,84 @@ namespace MythMayhem.Net
             MatchOutcome outcome = (MatchOutcome)snapshot.Outcome;
             if (outcome != MatchOutcome.None)
                 matchController.NetworkApplyOutcome(outcome);
+        }
+
+        // --- Connection loss handling ---
+
+        private bool HasRemotePeer()
+        {
+            NetworkManager manager = NetworkManager;
+            if (manager == null)
+                return false;
+
+            if (IsServer)
+                return manager.IsListening && manager.ConnectedClientsIds.Count >= 2;
+
+            return manager.IsConnectedClient;
+        }
+
+        private void SubscribeDisconnectEvents()
+        {
+            NetworkManager manager = NetworkManager;
+            if (manager == null)
+                return;
+
+            subscribedManager = manager;
+            manager.OnClientDisconnectCallback += HandleClientDisconnected;
+            manager.OnTransportFailure += HandleTransportFailure;
+        }
+
+        private void UnsubscribeDisconnectEvents()
+        {
+            if (subscribedManager == null)
+                return;
+
+            subscribedManager.OnClientDisconnectCallback -= HandleClientDisconnected;
+            subscribedManager.OnTransportFailure -= HandleTransportFailure;
+            subscribedManager = null;
+        }
+
+        private void HandleClientDisconnected(ulong clientId)
+        {
+            if (subscribedManager == null || RelayLobbyConnector.IsShuttingDown)
+                return;
+
+            if (!ReferenceEquals(NetworkSession.Intents, this))
+                return;
+
+            // The host is told which client left; a client is told about its own
+            // id when the host goes away. Ignore the host's own shutdown notice.
+            bool opponentLeft = IsServer && clientId != subscribedManager.LocalClientId;
+            bool hostLeft = !IsServer && clientId == subscribedManager.LocalClientId;
+            if (!opponentLeft && !hostLeft)
+                return;
+
+            AwardWalkover(opponentLeft ? "Your opponent left the match." : "The host left the match.");
+        }
+
+        private void HandleTransportFailure()
+        {
+            if (RelayLobbyConnector.IsShuttingDown)
+                return;
+
+            if (!ReferenceEquals(NetworkSession.Intents, this))
+                return;
+
+            AwardWalkover("The connection was lost.");
+        }
+
+        // A mid-match disconnect ends the session, so award the remaining player
+        // the win instead of leaving them on a frozen board.
+        private void AwardWalkover(string message)
+        {
+            // The peer is gone either way, so a restart is no longer possible.
+            NetworkSession.SessionLost = true;
+
+            if (matchController == null || matchController.IsMatchOver)
+                return;
+
+            Debug.LogWarning("[PvP] " + message + " Awarding the match to the local player.");
+            matchController.EndMatch(MatchOutcome.PlayerWin);
         }
 
         // --- Client view setup ---

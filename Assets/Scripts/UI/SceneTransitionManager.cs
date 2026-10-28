@@ -161,6 +161,16 @@ namespace MythMayhem.UI
             instance.StartFadeOut(null);
         }
 
+        // Restores the view when a network scene load is aborted before any
+        // scene change happens (otherwise the game stays on a black screen).
+        public static void CancelNetworkFade()
+        {
+            if (instance == null)
+                return;
+
+            instance.StopFadesAndClearOverlay();
+        }
+
         private void CreateOverlay()
         {
             GameObject canvasObject = new GameObject("SceneFadeCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
